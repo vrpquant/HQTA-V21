@@ -147,7 +147,22 @@ if check_login():
             if st.button("🔄 Scan Market"):
                 with st.spinner("Calculating Alpha Scores..."):
                     df_scan = scan_market(default_tickers)
-                    st.dataframe(df_scan.style.background_gradient(subset=['Alpha Score'], cmap='RdYlGn', vmin=0, vmax=100), use_container_width=True)
+                    # FIX: Use Streamlit native column config instead of Pandas styling (removes matplotlib dependency)
+                    st.dataframe(
+                        df_scan,
+                        column_config={
+                            "Ticker": st.column_config.TextColumn("Ticker"),
+                            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+                            "Alpha Score": st.column_config.ProgressColumn(
+                                "Alpha Score",
+                                format="%d",
+                                min_value=0,
+                                max_value=100,
+                            ),
+                            "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
+                        },
+                        use_container_width=True
+                    )
 
     # === MODULE 2: DEEP DIVE ===
     elif mode == "🔬 Deep Dive & Monte Carlo":
