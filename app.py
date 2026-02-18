@@ -21,6 +21,19 @@ USERS = {
     "admin":      {"password": "admin",     "tier": "GOD_MODE"}
 }
 
+# --- COMPLIANCE CONSTANTS ---
+DISCLAIMER_TEXT = """
+**COMPLIANCE NOTICE & REGULATORY DISCLAIMER**
+
+HQTA V20.1 is a quantitative analysis tool provided for informational and educational purposes only. 
+It does not constitute an offer to sell, a solicitation of an offer to buy, or a recommendation of any security, cryptocurrency, or trading strategy.
+
+**1. No Financial Advice:** The "Alpha Score", "Trade Architect", and "Monte Carlo" projections are theoretical outcomes based on historical data. They do not guarantee future performance.
+**2. Risk Warning:** Options and futures trading involves substantial risk of loss and is not suitable for all investors. You should not risk more than you can afford to lose.
+**3. Regulation:** HQTA is not a registered investment advisor (RIA) or broker-dealer with the SEC or FINRA.
+**4. Liability:** Users assume full responsibility for any trading decisions made using this data.
+"""
+
 def check_login():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -141,6 +154,9 @@ if check_login():
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
             st.info("💡 Upgrade to God Mode ($999/mo) to unlock.")
             st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
+            
+            st.markdown("---")
+            st.caption(DISCLAIMER_TEXT)
         else:
             st.markdown("Live ranking of assets by **HQTA Alpha Score™**.")
             default_tickers = ["SPY", "QQQ", "IWM", "BTC-USD", "NVDA", "TSLA", "AAPL", "MSFT", "AMD", "COIN"]
@@ -163,6 +179,18 @@ if check_login():
                         },
                         use_container_width=True
                     )
+                    
+                    # GOD MODE FEATURE: Download Report for Scanner
+                    csv_data = df_scan.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="💾 Download Scanner Report (CSV)",
+                        data=csv_data,
+                        file_name=f"HQTA_Scanner_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+            
+            st.markdown("---")
+            st.caption(DISCLAIMER_TEXT)
 
     # === MODULE 2: DEEP DIVE ===
     elif mode == "🔬 Deep Dive & Monte Carlo":
@@ -238,8 +266,14 @@ Probability of Profit: {plan['pop']}%
 RISK ANALYSIS:
 95% Value at Risk (VaR): ${var_95:.2f}
 STATUS: {report_status}
+
+--------------------------------
+{DISCLAIMER_TEXT.replace('**', '')}
 """
                     st.download_button("💾 Download Institutional Report", report_txt, f"{ticker}_HQTA_Report.txt")
+                    
+                    st.markdown("---")
+                    st.caption(DISCLAIMER_TEXT)
                 else: st.error("Asset not found")
 
     # --- 5. LOGOUT (FIXED SECTION) ---
