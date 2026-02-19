@@ -56,8 +56,9 @@ def check_login():
         st.markdown("---")
         st.caption("New Client? Purchase Access:")
         b1, b2 = st.columns(2)
-        b1.link_button("Subscribe Analyst ($299)", "https://stripe.com") # Replace with your link
-        b2.link_button("Subscribe God Mode ($999)", "https://stripe.com") # Replace with your link
+        # PASTE YOUR STRIPE LINKS HERE 👇
+        b1.link_button("Subscribe Analyst ($299)", "https://buy.stripe.com/PLACEHOLDER_FOR_ANALYST_LINK") 
+        b2.link_button("Subscribe God Mode ($999)", "https://buy.stripe.com/PLACEHOLDER_FOR_GODMODE_LINK")
         return False
     return True
 
@@ -160,31 +161,45 @@ if check_login():
             st.info("💡 Upgrade to God Mode ($999/mo) to unlock Sector Scanning.")
             st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
         else:
-            # DROPDOWN SELECTOR
+            # DROPDOWN SELECTOR WITH CUSTOM OPTION
             st.markdown("### Select Institutional Universe")
-            sector_choice = st.selectbox("Select Sector:", list(TICKER_SETS.keys()))
-            selected_tickers = TICKER_SETS[sector_choice]
             
-            st.info(f"Scanning {len(selected_tickers)} Assets in **{sector_choice}**...")
+            # Combine preset keys with a "Custom" option
+            options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
+            sector_choice = st.selectbox("Select Sector:", options)
             
-            if st.button("🔄 Run Live Scan"):
-                with st.spinner("Calculating Alpha Scores..."):
-                    df_scan = scan_market(selected_tickers)
-                    
-                    st.dataframe(
-                        df_scan,
-                        column_config={
-                            "Ticker": st.column_config.TextColumn("Ticker"),
-                            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
-                            "Alpha Score": st.column_config.ProgressColumn("Alpha Score", format="%d", min_value=0, max_value=100),
-                            "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
-                        },
-                        use_container_width=True
-                    )
-                    
-                    # CSV EXPORT
-                    csv = df_scan.to_csv(index=False).encode('utf-8')
-                    st.download_button("💾 Download Scan Results (CSV)", csv, f"HQTA_Scan_{sector_choice}.csv", "text/csv")
+            selected_tickers = []
+            
+            if sector_choice == "✨ Custom Watchlist":
+                st.info("Paste your own list of tickers to scan (e.g. from your portfolio).")
+                custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI, DKNG, HOOD, ROKU")
+                if custom_input:
+                    selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
+            else:
+                selected_tickers = TICKER_SETS[sector_choice]
+            
+            if selected_tickers:
+                st.info(f"Scanning {len(selected_tickers)} Assets in **{sector_choice}**...")
+                
+                if st.button("🔄 Run Live Scan"):
+                    with st.spinner("Calculating Alpha Scores..."):
+                        df_scan = scan_market(selected_tickers)
+                        
+                        st.dataframe(
+                            df_scan,
+                            column_config={
+                                "Ticker": st.column_config.TextColumn("Ticker"),
+                                "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+                                "Alpha Score": st.column_config.ProgressColumn("Alpha Score", format="%d", min_value=0, max_value=100),
+                                "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
+                            },
+                            use_container_width=True
+                        )
+                        
+                        # CSV EXPORT
+                        csv = df_scan.to_csv(index=False).encode('utf-8')
+                        filename = "HQTA_Custom_Scan.csv" if "Custom" in sector_choice else f"HQTA_Scan_{sector_choice}.csv"
+                        st.download_button("💾 Download Scan Results (CSV)", csv, filename, "text/csv")
 
     # === MODULE 2: DEEP DIVE ===
     elif mode == "🔬 Deep Dive & Monte Carlo":
