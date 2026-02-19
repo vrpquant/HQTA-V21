@@ -11,7 +11,7 @@ import io
 from datetime import datetime
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="HQTA | V20.1 Tiered", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="HQTA | V21.1 Enterprise", layout="wide", page_icon="🏦")
 
 # --- 2. TIERED AUTHENTICATION ---
 USERS = {
@@ -23,15 +23,10 @@ USERS = {
 
 # --- COMPLIANCE CONSTANTS ---
 DISCLAIMER_TEXT = """
-**COMPLIANCE NOTICE & REGULATORY DISCLAIMER**
-
-HQTA V20.1 is a quantitative analysis tool provided for informational and educational purposes only. 
-It does not constitute an offer to sell, a solicitation of an offer to buy, or a recommendation of any security, cryptocurrency, or trading strategy.
-
-**1. No Financial Advice:** The "Alpha Score", "Trade Architect", and "Monte Carlo" projections are theoretical outcomes based on historical data. They do not guarantee future performance.
-**2. Risk Warning:** Options and futures trading involves substantial risk of loss and is not suitable for all investors. You should not risk more than you can afford to lose.
-**3. Regulation:** HQTA is not a registered investment advisor (RIA) or broker-dealer with the SEC or FINRA.
-**4. Liability:** Users assume full responsibility for any trading decisions made using this data.
+**REGULATORY DISCLAIMER & COMPLIANCE NOTICE**
+1. **No Financial Advice:** HQTA is a quantitative tool for informational purposes only.
+2. **Risk Warning:** Trading involves substantial risk. You are solely responsible for your trades.
+3. **Hypothetical Results:** Alpha Scores and Monte Carlo projections are theoretical.
 """
 
 def check_login():
@@ -45,7 +40,6 @@ def check_login():
         st.caption("Restricted Institutional Access")
         c1, c2 = st.columns([1, 2])
         with c1:
-            # Added unique keys to prevent ID collisions just in case
             username = st.text_input("Username", key="login_user")
             password = st.text_input("Password", type="password", key="login_pass")
             
@@ -57,6 +51,13 @@ def check_login():
                     st.rerun()
                 else:
                     st.error("Invalid Credentials")
+        
+        # BUY BUTTONS FOR NEW USERS
+        st.markdown("---")
+        st.caption("New Client? Purchase Access:")
+        b1, b2 = st.columns(2)
+        b1.link_button("Subscribe Analyst ($299)", "https://stripe.com") # Replace with your link
+        b2.link_button("Subscribe God Mode ($999)", "https://stripe.com") # Replace with your link
         return False
     return True
 
@@ -129,20 +130,15 @@ def scan_market(tickers):
     return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
 
 # --- 4. UI LOGIC ---
-# Only run the main app if login is successful
 if check_login():
-    # Load session variables
     tier = st.session_state.tier
     user = st.session_state.user
     
-    # Sidebar
     st.sidebar.markdown("# 🏦 HQTA Terminal")
     if tier == "GOD_MODE":
         st.sidebar.success(f"🔓 GOD MODE ACTIVE")
-        st.sidebar.caption("Full Institutional Access")
     else:
         st.sidebar.warning(f"🔒 ANALYST TIER")
-        st.sidebar.caption("Limited Access")
         
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive & Monte Carlo"])
     
@@ -150,47 +146,45 @@ if check_login():
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
         
+        # PRE-DEFINED WATCHLISTS (The Upgrade)
+        TICKER_SETS = {
+            "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
+            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH", "SOXL"],
+            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CCJ", "URA", "CVX", "XOM", "UNG"],
+            "📉 Volatility & Hedges": ["VIXY", "UVXY", "TLT", "SH", "SQQQ", "SPXU"],
+            "🏦 Financials": ["JPM", "GS", "BAC", "MS", "C", "XLF", "KRE"]
+        }
+
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
-            st.info("💡 Upgrade to God Mode ($999/mo) to unlock.")
+            st.info("💡 Upgrade to God Mode ($999/mo) to unlock Sector Scanning.")
             st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
-            
-            st.markdown("---")
-            st.caption(DISCLAIMER_TEXT)
         else:
-            st.markdown("Live ranking of assets by **HQTA Alpha Score™**.")
-            default_tickers = ["SPY", "QQQ", "IWM", "BTC-USD", "NVDA", "TSLA", "AAPL", "MSFT", "AMD", "COIN"]
-            if st.button("🔄 Scan Market"):
+            # DROPDOWN SELECTOR
+            st.markdown("### Select Institutional Universe")
+            sector_choice = st.selectbox("Select Sector:", list(TICKER_SETS.keys()))
+            selected_tickers = TICKER_SETS[sector_choice]
+            
+            st.info(f"Scanning {len(selected_tickers)} Assets in **{sector_choice}**...")
+            
+            if st.button("🔄 Run Live Scan"):
                 with st.spinner("Calculating Alpha Scores..."):
-                    df_scan = scan_market(default_tickers)
-                    # FIX: Use Streamlit native column config instead of Pandas styling (removes matplotlib dependency)
+                    df_scan = scan_market(selected_tickers)
+                    
                     st.dataframe(
                         df_scan,
                         column_config={
                             "Ticker": st.column_config.TextColumn("Ticker"),
                             "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
-                            "Alpha Score": st.column_config.ProgressColumn(
-                                "Alpha Score",
-                                format="%d",
-                                min_value=0,
-                                max_value=100,
-                            ),
+                            "Alpha Score": st.column_config.ProgressColumn("Alpha Score", format="%d", min_value=0, max_value=100),
                             "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
                         },
                         use_container_width=True
                     )
                     
-                    # GOD MODE FEATURE: Download Report for Scanner
-                    csv_data = df_scan.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="💾 Download Scanner Report (CSV)",
-                        data=csv_data,
-                        file_name=f"HQTA_Scanner_{datetime.now().strftime('%Y%m%d')}.csv",
-                        mime="text/csv"
-                    )
-            
-            st.markdown("---")
-            st.caption(DISCLAIMER_TEXT)
+                    # CSV EXPORT
+                    csv = df_scan.to_csv(index=False).encode('utf-8')
+                    st.download_button("💾 Download Scan Results (CSV)", csv, f"HQTA_Scan_{sector_choice}.csv", "text/csv")
 
     # === MODULE 2: DEEP DIVE ===
     elif mode == "🔬 Deep Dive & Monte Carlo":
@@ -244,13 +238,13 @@ if check_login():
                     if tier == "GOD_MODE":
                         var_99 = np.percentile(final_prices, 1)
                         r3.metric("99% Black Swan", f"${var_99:.2f}", delta_color="inverse", help="The 1% Tail Risk Event")
-                        report_status = "GOD MODE - DEEP COMPUTE VERIFIED"
+                        status = "GOD MODE - DEEP COMPUTE VERIFIED"
                     else:
                         r3.metric("99% Black Swan", "🔒 LOCKED", help="Upgrade to God Mode to see Tail Risk")
-                        report_status = "ANALYST TIER - STANDARD RESOLUTION"
+                        status = "ANALYST TIER - STANDARD RESOLUTION"
 
-                    # REPORT GENERATION
-                    report_txt = f"""HQTA V20.1 INSTITUTIONAL REPORT
+                    # REPORT DOWNLOAD
+                    report_txt = f"""HQTA V21.1 INSTITUTIONAL REPORT
 --------------------------------
 DATE: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 TICKER: {ticker}
@@ -258,26 +252,21 @@ ALPHA SCORE: {score}/100
 BIAS: {plan['bias']}
 VOLATILITY: {vol:.1f}%
 
-STRATEGY RECOMMENDATION:
-Structure: {plan['strat']}
-Legs: {plan['legs']}
-Probability of Profit: {plan['pop']}%
-
-RISK ANALYSIS:
-95% Value at Risk (VaR): ${var_95:.2f}
-STATUS: {report_status}
+RISK METRICS (Monte Carlo):
+95% Value at Risk: ${var_95:.2f}
+Simulations: {sim_depth:,}
+Status: {status}
 
 --------------------------------
 {DISCLAIMER_TEXT.replace('**', '')}
 """
-                    st.download_button("💾 Download Institutional Report", report_txt, f"{ticker}_HQTA_Report.txt")
+                    st.download_button("💾 Download Report (TXT)", report_txt, f"{ticker}_HQTA_Report.txt")
                     
                     st.markdown("---")
                     st.caption(DISCLAIMER_TEXT)
                 else: st.error("Asset not found")
 
-    # --- 5. LOGOUT (FIXED SECTION) ---
-    # We do NOT call check_login() here. We just check the state.
+    # --- 5. LOGOUT ---
     with st.sidebar:
         st.markdown("---")
         if st.button("Log Out"):
