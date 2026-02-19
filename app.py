@@ -128,13 +128,18 @@ class MarketScanner:
 
 st.set_page_config(page_title="HQTA | V21.2 Command", layout="wide", page_icon="🏦")
 
-USERS = {
-    "analyst":    {"password": "data2026",  "tier": "ANALYST"},
-    "fund":       {"password": "alpha2026", "tier": "GOD_MODE"},
-    "demo":       {"password": "demo",      "tier": "ANALYST"},
-    "admin":      {"password": "admin",     "tier": "GOD_MODE"},
-    "guest":      {"password": "start_risk_free", "tier": "ANALYST"}
-}
+# --- LOAD SECRETS FROM THE VAULT ---
+try:
+    USERS = {
+        "analyst":    {"password": st.secrets["ANALYST_PW"],  "tier": "ANALYST"},
+        "fund":       {"password": st.secrets["FUND_PW"],     "tier": "GOD_MODE"},
+        "demo":       {"password": st.secrets["DEMO_PW"],     "tier": "ANALYST"},
+        "admin":      {"password": st.secrets["ADMIN_PW"],    "tier": "GOD_MODE"},
+        "guest":      {"password": st.secrets["GUEST_PW"],    "tier": "ANALYST"}
+    }
+except Exception as e:
+    st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please add passwords to Streamlit Secrets.")
+    st.stop()
 
 DISCLAIMER_TEXT = """
 **REGULATORY DISCLAIMER & COMPLIANCE NOTICE**
@@ -161,7 +166,6 @@ def check_login():
                     st.rerun()
                 else: st.error("Invalid Credentials")
         
-        # --- THE WAITLIST FIX ---
         st.markdown("---")
         st.caption("New Client? The Payment Gateway opens next week.")
         b1, b2 = st.columns(2)
