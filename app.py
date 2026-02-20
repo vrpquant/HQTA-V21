@@ -6,29 +6,55 @@ import plotly.graph_objects as go
 from scipy.stats import norm
 from datetime import datetime
 import time
+import requests
 
 # ==========================================
 # --- PART 1: THE CORE ENGINE (BACKEND) ---
 # ==========================================
 
+class SchwabDataHandler:
+    """Institutional Market Data Integration for Charles Schwab"""
+    BASE_URL = "https://api.schwabapi.com/marketdata/v1"
+    
+    @staticmethod
+    def is_configured():
+        try:
+            return "SCHWAB_APP_KEY" in st.secrets and "SCHWAB_APP_SECRET" in st.secrets
+        except:
+            return False
+
+    @staticmethod
+    def get_price_history(ticker):
+        # Placeholder for the OAuth2.0 Token handshake we will build next
+        # Once authenticated, this will ping /pricehistory and return a DataFrame
+        return None 
+
 class DataHandler:
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
     def fetch(ticker, retries=3):
-        """Robust fetcher with exponential backoff for yfinance websocket/API failures"""
+        """Dual-Feed Routing: Tries Schwab API first, falls back to yfinance"""
+        
+        # 1. Attempt Institutional Feed (Schwab)
+        if SchwabDataHandler.is_configured():
+            # In V22.1 we will activate the live Schwab feed here after token setup
+            schwab_df = SchwabDataHandler.get_price_history(ticker)
+            if schwab_df is not None:
+                st.session_state.data_feed = "Charles Schwab API (Live)"
+                return schwab_df
+
+        # 2. Fallback to Retail Feed (yfinance)
+        st.session_state.data_feed = "yfinance (15m Delayed)"
         for attempt in range(retries):
             try:
-                # Attempt 1: Standard Ticker History
                 ticker_obj = yf.Ticker(ticker)
                 df = ticker_obj.history(period="2y", raise_errors=True)
-                
-                # Validation check: Ensure we actually got data
                 if df is not None and not df.empty and len(df) > 50:
                     return df
             except Exception as e:
-                time.sleep(1.5 ** attempt) # Exponential backoff: 1s, 1.5s, 2.25s
+                time.sleep(1.5 ** attempt) 
                 
-        return None # Graceful failure after 3 attempts
+        return None
 
 class AlphaEngine:
     @staticmethod
@@ -53,27 +79,21 @@ class AlphaEngine:
 class BacktestEngine:
     @staticmethod
     def run_quick_backtest(df):
-        """Vectorized 2-year backtest of the core trend strategy on this specific asset"""
         try:
             bt_df = df.copy()
             bt_df['SMA50'] = bt_df['Close'].rolling(50).mean()
             bt_df['SMA200'] = bt_df['Close'].rolling(200).mean()
-            
-            # Signal: 1 (Long) if 50 > 200, -1 (Short) if 50 < 200
             bt_df['Signal'] = np.where(bt_df['SMA50'] > bt_df['SMA200'], 1, -1)
-            bt_df['Signal'] = bt_df['Signal'].shift(1) # Prevent lookahead bias
-            
+            bt_df['Signal'] = bt_df['Signal'].shift(1)
             bt_df['Daily_Return'] = bt_df['Close'].pct_change()
             bt_df['Strategy_Return'] = bt_df['Signal'] * bt_df['Daily_Return']
             
-            # Calculate Metrics
             winning_days = (bt_df['Strategy_Return'] > 0).sum()
             total_trades_days = (bt_df['Strategy_Return'] != 0).sum()
             win_rate = (winning_days / total_trades_days) * 100 if total_trades_days > 0 else 0
             
             cumulative_return = (1 + bt_df['Strategy_Return'].dropna()).prod() - 1
             buy_hold_return = (1 + bt_df['Daily_Return'].dropna()).prod() - 1
-            
             outperformance = cumulative_return - buy_hold_return
             
             return win_rate, cumulative_return * 100, outperformance * 100
@@ -128,7 +148,6 @@ class TradeArchitect:
         else: bias = "NEUTRAL (Mean-Reverting)"
         
         vol_regime = "HIGH" if vol > 35 else "LOW"
-        
         sigma = max(0.01, vol / 100) 
         r = 0.04 
         T30 = 30 / 365 
@@ -210,11 +229,7 @@ class MarketScanner:
                 sharpe = QuantLogic.calculate_sharpe(df)
                 vrp = QuantLogic.calculate_vrp_edge(df)
                 sup, res = QuantLogic.get_support_resistance(df)
-                
-                # Fetch Strategy Architecture
                 plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
-                
-                # Run quick MC for 95% VaR (Stop Loss calculation)
                 mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
                 stop_loss = np.percentile(mc_df.iloc[-1], 5)
 
@@ -240,7 +255,10 @@ class MarketScanner:
 # --- PART 2: THE STREAMLIT APP (UI) ---
 # ==========================================
 
-st.set_page_config(page_title="HQTA | V21.5 Command", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="🏦")
+
+if 'data_feed' not in st.session_state:
+    st.session_state.data_feed = "Initializing..."
 
 # --- LOAD SECRETS FROM THE VAULT ---
 try:
@@ -300,10 +318,18 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     
-    st.sidebar.markdown("# 🏦 HQTA V21.5")
-    if tier == "GOD_MODE": st.sidebar.success("🔓 GOD MODE ACTIVE")
-    else: st.sidebar.warning("🔒 ANALYST TIER")
+    with st.sidebar:
+        st.markdown("# 🏦 HQTA V22.0")
+        if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
+        else: st.warning("🔒 ANALYST TIER")
         
+        st.markdown("---")
+        st.caption("SYSTEM STATUS")
+        if "Schwab" in st.session_state.data_feed:
+            st.success(f"📡 {st.session_state.data_feed}")
+        else:
+            st.warning(f"📡 {st.session_state.data_feed}")
+            
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
     # === MODULE 1: MARKET SCANNER ===
@@ -366,7 +392,7 @@ if check_login():
                         }, use_container_width=True)
                         
                         csv = df_scan.to_csv(index=False).encode('utf-8')
-                        st.download_button("💾 Download Results (CSV)", csv, "HQTA_Institutional_Scan_V21.5.csv", "text/csv")
+                        st.download_button("💾 Download Results (CSV)", csv, "HQTA_Institutional_Scan_V22.csv", "text/csv")
                     else:
                         st.warning("Data fetch failed due to API constraints. Please try again in 30 seconds.")
 
@@ -387,9 +413,7 @@ if check_login():
                     sharpe = QuantLogic.calculate_sharpe(df)
                     vrp_edge = QuantLogic.calculate_vrp_edge(df)
                     
-                    # Run Backtest Validation
                     win_rate, strat_ret, outperf = BacktestEngine.run_quick_backtest(df)
-                    
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
                     
                     st.markdown("### 📊 Market Variables")
@@ -443,7 +467,7 @@ if check_login():
                         r2.metric("99% Black Swan", "🔒 LOCKED", help="Upgrade to God Mode")
                         status = "ANALYST TIER - STANDARD"
 
-                    report_txt = f"""HQTA V21.5 INSTITUTIONAL REPORT
+                    report_txt = f"""HQTA V22.0 INSTITUTIONAL REPORT
 --------------------------------
 DATE: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 TICKER: {ticker}
@@ -475,14 +499,11 @@ Optimal Horizon (DTE): {plan['dte']}
 
 RISK ANALYSIS:
 95% Value at Risk Limit: ${var_95:.2f}
-
---------------------------------
-{DISCLAIMER_TEXT.replace('**', '')}
 """
                     st.download_button("💾 Download Trade Plan (TXT)", report_txt, f"{ticker}_VRP_Trade_Plan.txt")
                     
                 else: 
-                    st.error("⚠️ DATA FETCH ERROR: Connection to market data feeds timed out after multiple attempts. This is usually due to temporary API rate limits. Please wait 30 seconds and try again.")
+                    st.error("⚠️ DATA FETCH ERROR: Connection to market data feeds timed out. Please wait 30 seconds and try again.")
         
     with st.sidebar:
         st.markdown("---")
