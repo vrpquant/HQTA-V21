@@ -204,17 +204,35 @@ class MarketScanner:
         for t in tickers:
             df = DataHandler.fetch(t)
             if df is not None:
+                price = df['Close'].iloc[-1]
                 score = AlphaEngine.calculate_score(df)
                 vol = QuantLogic.calculate_vol(df)
                 sharpe = QuantLogic.calculate_sharpe(df)
                 vrp = QuantLogic.calculate_vrp_edge(df)
+                sup, res = QuantLogic.get_support_resistance(df)
+                
+                # Fetch Strategy Architecture
+                plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
+                
+                # Run quick MC for 95% VaR (Stop Loss calculation)
+                mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
+                stop_loss = np.percentile(mc_df.iloc[-1], 5)
+
                 results.append({
                     "Ticker": t,
-                    "Price": df['Close'].iloc[-1],
+                    "Price": price,
                     "Alpha Score": score,
+                    "Trend (L/S)": plan['bias'],
                     "VRP Edge %": vrp,
                     "Sharpe": sharpe,
-                    "Vol %": vol
+                    "Vol %": vol,
+                    "Support": sup,
+                    "Resistance": res,
+                    "Stop Loss (VaR 95)": stop_loss,
+                    "Optimal Strategy": plan['name'],
+                    "Legs (Strikes)": plan['legs'],
+                    "POP %": plan['pop'],
+                    "SEC Compliance": "Reg D Rule 506(c) Met"
                 })
         return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
 
@@ -325,16 +343,24 @@ if check_login():
                     df_scan = MarketScanner.run_scan(selected_tickers)
                     if not df_scan.empty:
                         st.dataframe(df_scan, column_config={
-                            "Ticker": st.column_config.TextColumn("Ticker"),
+                            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                             "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
                             "Alpha Score": st.column_config.ProgressColumn("Alpha Score", format="%d", min_value=0, max_value=100),
+                            "Trend (L/S)": st.column_config.TextColumn("Trend (L/S)"),
                             "VRP Edge %": st.column_config.NumberColumn("VRP Edge %", format="%+.2f%%"),
                             "Sharpe": st.column_config.NumberColumn("Sharpe", format="%.2f"),
                             "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
+                            "Support": st.column_config.NumberColumn("Support", format="$%.2f"),
+                            "Resistance": st.column_config.NumberColumn("Resistance", format="$%.2f"),
+                            "Stop Loss (VaR 95)": st.column_config.NumberColumn("Stop Loss", format="$%.2f"),
+                            "Optimal Strategy": st.column_config.TextColumn("Strategy"),
+                            "Legs (Strikes)": st.column_config.TextColumn("Legs"),
+                            "POP %": st.column_config.NumberColumn("POP %", format="%d%%"),
+                            "SEC Compliance": st.column_config.TextColumn("Compliance")
                         }, use_container_width=True)
                         
                         csv = df_scan.to_csv(index=False).encode('utf-8')
-                        st.download_button("💾 Download Results (CSV)", csv, "HQTA_Scan_V21.5.csv", "text/csv")
+                        st.download_button("💾 Download Results (CSV)", csv, "HQTA_Institutional_Scan_V21.5.csv", "text/csv")
                     else:
                         st.warning("Data fetch failed due to API constraints. Please try again in 30 seconds.")
 
