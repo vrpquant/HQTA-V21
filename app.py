@@ -265,12 +265,16 @@ st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="�
 if 'data_feed' not in st.session_state:
     st.session_state.data_feed = "Initializing..."
 
-# --- MOCK USERS FOR TESTING PURPOSES ---
-# In production, keep using st.secrets or a real database
-USERS = {
-    "analyst":    {"password": "123",  "tier": "ANALYST"},
-    "fund":       {"password": "123",  "tier": "GOD_MODE"},
-}
+# --- SECURE PRODUCTION USERS DICTIONARY ---
+try:
+    USERS = {
+        "admin": {"password": st.secrets["ADMIN_PW"], "tier": "GOD_MODE"}
+        # You will add new paying clients to your Streamlit secrets vault like this:
+        # "new_client_username": {"password": st.secrets["NEW_CLIENT_PW"], "tier": "ANALYST"}
+    }
+except Exception as e:
+    st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please add passwords to Streamlit Secrets.")
+    st.stop()
 
 DISCLAIMER_TEXT = """
 **SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
@@ -286,7 +290,8 @@ def check_login():
         
     if not st.session_state.authenticated:
         st.markdown("## 🔒 HQTA Terminal Login")
-        st.info("Test Accounts: Username: 'analyst' or 'fund' | Password: '123'")
+        # Removed the test account banner for production!
+        
         c1, c2 = st.columns([1, 2])
         with c1:
             user = st.text_input("Username", key="login_u")
@@ -308,12 +313,12 @@ def check_login():
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
             # --- PASTE YOUR PAYPAL ANALYST LINK BELOW ---
-            st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($149/mo)", "YOUR_PAYPAL_ANALYST_LINK", use_container_width=True)
             
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
             # --- PASTE YOUR PAYPAL GOD MODE LINK BELOW ---
-            st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($499/mo)", "YOUR_PAYPAL_GODMODE_LINK", use_container_width=True)
             
         st.markdown("---")
         st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
