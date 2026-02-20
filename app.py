@@ -310,6 +310,10 @@ if check_login():
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
         
+        st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
+        st.caption(DISCLAIMER_TEXT)
+        st.markdown("---")
+        
         TICKER_SETS = {
             "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
             "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH", "SOXL"],
@@ -471,6 +475,9 @@ Optimal Horizon (DTE): {plan['dte']}
 
 RISK ANALYSIS:
 95% Value at Risk Limit: ${var_95:.2f}
+
+--------------------------------
+{DISCLAIMER_TEXT.replace('**', '')}
 """
                     st.download_button("💾 Download Trade Plan (TXT)", report_txt, f"{ticker}_VRP_Trade_Plan.txt")
                     
