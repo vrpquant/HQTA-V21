@@ -25,8 +25,7 @@ class SchwabDataHandler:
 
     @staticmethod
     def get_price_history(ticker):
-        # Placeholder for the OAuth2.0 Token handshake we will build next
-        # Once authenticated, this will ping /pricehistory and return a DataFrame
+        # Placeholder for the OAuth2.0 Token handshake
         return None 
 
 class DataHandler:
@@ -37,7 +36,6 @@ class DataHandler:
         
         # 1. Attempt Institutional Feed (Schwab)
         if SchwabDataHandler.is_configured():
-            # In V22.1 we will activate the live Schwab feed here after token setup
             schwab_df = SchwabDataHandler.get_price_history(ticker)
             if schwab_df is not None:
                 st.session_state.data_feed = "Charles Schwab API (Live)"
@@ -48,7 +46,7 @@ class DataHandler:
         for attempt in range(retries):
             try:
                 ticker_obj = yf.Ticker(ticker)
-                df = ticker_obj.history(period="2y", raise_errors=True)
+                df = ticker_obj.history(period="2y")
                 if df is not None and not df.empty and len(df) > 50:
                     return df
             except Exception as e:
@@ -65,16 +63,20 @@ class AlphaEngine:
             sma200 = df['Close'].rolling(200).mean().iloc[-1]
             vol = df['Close'].pct_change().std() * np.sqrt(252)
             score = 50 
+            
             if curr > sma50 > sma200: score += 30 
             elif curr < sma50 < sma200: score -= 30 
             elif curr > sma50: score += 10 
             elif curr < sma50: score -= 10 
+            
             mom = (curr / df['Close'].iloc[-10]) - 1
             if mom > 0.05: score += 10
             elif mom < -0.05: score -= 10
             if vol > 0.50: score -= 10 
+            
             return max(0, min(100, score))
-        except: return 50
+        except: 
+            return 50
 
 class BacktestEngine:
     @staticmethod
@@ -83,7 +85,9 @@ class BacktestEngine:
             bt_df = df.copy()
             bt_df['SMA50'] = bt_df['Close'].rolling(50).mean()
             bt_df['SMA200'] = bt_df['Close'].rolling(200).mean()
+            # 1 for Golden Cross, -1 for Death Cross
             bt_df['Signal'] = np.where(bt_df['SMA50'] > bt_df['SMA200'], 1, -1)
+            # Shift signal to prevent lookahead bias
             bt_df['Signal'] = bt_df['Signal'].shift(1)
             bt_df['Daily_Return'] = bt_df['Close'].pct_change()
             bt_df['Strategy_Return'] = bt_df['Signal'] * bt_df['Daily_Return']
@@ -149,7 +153,7 @@ class TradeArchitect:
         
         vol_regime = "HIGH" if vol > 35 else "LOW"
         sigma = max(0.01, vol / 100) 
-        r = 0.04 
+        r = 0.04  # Assuming 4% risk-free rate
         T30 = 30 / 365 
         T60 = 60 / 365 
         
@@ -218,6 +222,7 @@ class MonteCarloEngine:
 
 class MarketScanner:
     @staticmethod
+    @st.cache_data(ttl=900, show_spinner=False)
     def run_scan(tickers):
         results = []
         for t in tickers:
@@ -260,18 +265,12 @@ st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="�
 if 'data_feed' not in st.session_state:
     st.session_state.data_feed = "Initializing..."
 
-# --- LOAD SECRETS FROM THE VAULT ---
-try:
-    USERS = {
-        "analyst":    {"password": st.secrets["ANALYST_PW"],  "tier": "ANALYST"},
-        "fund":       {"password": st.secrets["FUND_PW"],     "tier": "GOD_MODE"},
-        "demo":       {"password": st.secrets["DEMO_PW"],     "tier": "ANALYST"},
-        "admin":      {"password": st.secrets["ADMIN_PW"],    "tier": "GOD_MODE"},
-        "guest":      {"password": st.secrets["GUEST_PW"],    "tier": "ANALYST"}
-    }
-except Exception as e:
-    st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please add passwords to Streamlit Secrets.")
-    st.stop()
+# --- MOCK USERS FOR TESTING PURPOSES ---
+# In production, keep using st.secrets or a real database
+USERS = {
+    "analyst":    {"password": "123",  "tier": "ANALYST"},
+    "fund":       {"password": "123",  "tier": "GOD_MODE"},
+}
 
 DISCLAIMER_TEXT = """
 **SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
@@ -287,6 +286,7 @@ def check_login():
         
     if not st.session_state.authenticated:
         st.markdown("## 🔒 HQTA Terminal Login")
+        st.info("Test Accounts: Username: 'analyst' or 'fund' | Password: '123'")
         c1, c2 = st.columns([1, 2])
         with c1:
             user = st.text_input("Username", key="login_u")
@@ -296,17 +296,24 @@ def check_login():
                     st.session_state.authenticated = True
                     st.session_state.tier = USERS[user]["tier"]
                     st.rerun()
-                else: st.error("Invalid Credentials")
+                else: 
+                    st.error("Invalid Credentials")
         
         st.markdown("---")
-        st.caption("New Client? The Payment Gateway opens next week.")
+        st.markdown("### 👑 Founding Member Cohort (Beta)")
+        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta cohort today to lock in your lifetime discounted rate.")
+        
         b1, b2 = st.columns(2)
         
-        if b1.button("Subscribe Analyst ($299)"):
-            st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
+        with b1:
+            st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
+            # --- PASTE YOUR PAYPAL ANALYST LINK BELOW ---
+            st.link_button("Subscribe via PayPal ($149/mo)", "YOUR_PAYPAL_ANALYST_LINK", use_container_width=True)
             
-        if b2.button("Subscribe God Mode ($999)"):
-            st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
+        with b2:
+            st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
+            # --- PASTE YOUR PAYPAL GOD MODE LINK BELOW ---
+            st.link_button("Subscribe via PayPal ($499/mo)", "YOUR_PAYPAL_GODMODE_LINK", use_container_width=True)
             
         st.markdown("---")
         st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
@@ -320,8 +327,10 @@ if check_login():
     
     with st.sidebar:
         st.markdown("# 🏦 HQTA V22.0")
-        if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
-        else: st.warning("🔒 ANALYST TIER")
+        if tier == "GOD_MODE": 
+            st.success("🔓 GOD MODE ACTIVE")
+        else: 
+            st.warning("🔒 ANALYST TIER")
         
         st.markdown("---")
         st.caption("SYSTEM STATUS")
@@ -332,7 +341,7 @@ if check_login():
             
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
-    # === MODULE 1: MARKET SCANNER ===
+    # === MODULE 1: MARKET Scanner ===
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
         
@@ -350,7 +359,7 @@ if check_login():
 
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
-            st.info("Subscribe to God Mode ($999/mo) to unlock.")
+            st.info("Subscribe to God Mode Beta ($499/mo) to unlock.")
             st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
         else:
             st.markdown("### Select Institutional Universe")
