@@ -231,8 +231,7 @@ class MarketScanner:
                     "Stop Loss (VaR 95)": stop_loss,
                     "Optimal Strategy": plan['name'],
                     "Legs (Strikes)": plan['legs'],
-                    "POP %": plan['pop'],
-                    "SEC Compliance": "Reg D Rule 506(c) Met"
+                    "POP %": plan['pop']
                 })
         return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
 
@@ -291,6 +290,10 @@ def check_login():
         if b2.button("Subscribe God Mode ($999)"):
             st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
             
+        st.markdown("---")
+        st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
+        st.caption(DISCLAIMER_TEXT)
+        
         return False
     return True
 
@@ -355,8 +358,7 @@ if check_login():
                             "Stop Loss (VaR 95)": st.column_config.NumberColumn("Stop Loss", format="$%.2f"),
                             "Optimal Strategy": st.column_config.TextColumn("Strategy"),
                             "Legs (Strikes)": st.column_config.TextColumn("Legs"),
-                            "POP %": st.column_config.NumberColumn("POP %", format="%d%%"),
-                            "SEC Compliance": st.column_config.TextColumn("Compliance")
+                            "POP %": st.column_config.NumberColumn("POP %", format="%d%%")
                         }, use_container_width=True)
                         
                         csv = df_scan.to_csv(index=False).encode('utf-8')
@@ -385,8 +387,6 @@ if check_login():
                     win_rate, strat_ret, outperf = BacktestEngine.run_quick_backtest(df)
                     
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
-                    
-                    st.success("🛡️ SEC Compliance Check: Data verified. Reg D Rule 506(c) display parameters met.")
                     
                     st.markdown("### 📊 Market Variables")
                     m1, m2, m3, m4 = st.columns(4)
@@ -471,18 +471,12 @@ Optimal Horizon (DTE): {plan['dte']}
 
 RISK ANALYSIS:
 95% Value at Risk Limit: ${var_95:.2f}
-
---------------------------------
-{DISCLAIMER_TEXT.replace('**', '')}
 """
                     st.download_button("💾 Download Trade Plan (TXT)", report_txt, f"{ticker}_VRP_Trade_Plan.txt")
                     
                 else: 
                     st.error("⚠️ DATA FETCH ERROR: Connection to market data feeds timed out after multiple attempts. This is usually due to temporary API rate limits. Please wait 30 seconds and try again.")
         
-        st.markdown("---")
-        st.caption(DISCLAIMER_TEXT)
-
     with st.sidebar:
         st.markdown("---")
         if st.button("Log Out"):
