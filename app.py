@@ -308,12 +308,12 @@ def check_login():
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
             # --- PASTE YOUR PAYPAL ANALYST LINK BELOW ---
-            st.link_button("Subscribe via PayPal ($149/mo)", "YOUR_PAYPAL_ANALYST_LINK", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
             
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
             # --- PASTE YOUR PAYPAL GOD MODE LINK BELOW ---
-            st.link_button("Subscribe via PayPal ($499/mo)", "YOUR_PAYPAL_GODMODE_LINK", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
             
         st.markdown("---")
         st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
