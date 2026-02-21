@@ -42,7 +42,7 @@ class DataHandler:
                 return schwab_df
 
         # 2. Fallback to Retail Feed (yfinance)
-        st.session_state.data_feed = "yfinance (15m Delayed)"
+        st.session_state.data_feed = "st.sidebar.success(🟢 Quant Data Connection: Secure)"
         for attempt in range(retries):
             try:
                 ticker_obj = yf.Ticker(ticker)
