@@ -541,14 +541,30 @@ if check_login():
                     mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
                     var_95 = np.percentile(mc_df.iloc[-1], 5)
                     
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(y=df['Close'], name='History', line=dict(color='white')))
-                    fig.add_trace(go.Scatter(x=list(range(len(df), len(df)+30)), y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
-                    fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
-                    fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
+                    # --- UPGRADED INSTITUTIONAL CHARTING ---
+                    last_date = df.index[-1]
+                    future_dates = pd.bdate_range(start=last_date, periods=31)
                     
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)")
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig = go.Figure()
+                    
+                    # History Line (Using a professional institutional blue so it works on Light & Dark mode)
+                    fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='History', line=dict(color='#2962FF', width=2)))
+                    
+                    # Monte Carlo Mean Projection Line
+                    fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='#FF9100', width=2)))
+                    
+                    # Support and Resistance Lines
+                    fig.add_hline(y=sup, line_dash="dot", line_color="#00E676", annotation_text="Support", annotation_position="bottom right")
+                    fig.add_hline(y=res, line_dash="dot", line_color="#FF1744", annotation_text="Resistance", annotation_position="top right")
+                    
+                    fig.update_layout(
+                        height=500, 
+                        title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)",
+                        margin=dict(l=0, r=0, t=40, b=0)
+                    )
+                    
+                    # Use theme=None to allow Plotly colors to shine through Streamlit's wrapper
+                    st.plotly_chart(fig, use_container_width=True, theme=None)
                     
                     r1, r2 = st.columns(2)
                     r1.metric("95% Value at Risk (Stop)", f"${var_95:.2f}", delta_color="inverse")
