@@ -542,10 +542,22 @@ if check_login():
                     var_95 = np.percentile(mc_df.iloc[-1], 5)
                     
                     # --- UPGRADED INSTITUTIONAL CHARTING ---
-                    last_date = df.index[-1]
-                    future_dates = pd.bdate_range(start=last_date, periods=31)
+                    # 1. Grab the dates so they show up on the bottom axis!
+                    future_dates = pd.bdate_range(start=df.index[-1], periods=31)
                     
                     fig = go.Figure()
+                    
+                    # 2. History Line (Notice we added x=df.index)
+                    fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='History', line=dict(color='#2962FF', width=2)))
+                    
+                    # 3. Projection Line (Notice we added x=future_dates)
+                    fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='#FF9100', width=2)))
+                    
+                    fig.add_hline(y=sup, line_dash="dot", line_color="#00E676", annotation_text="Support")
+                    fig.add_hline(y=res, line_dash="dot", line_color="#FF1744", annotation_text="Resistance")
+                    
+                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)")
+                    st.plotly_chart(fig, use_container_width=True)
                     
                     # History Line (Using a professional institutional blue so it works on Light & Dark mode)
                     fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='History', line=dict(color='#2962FF', width=2)))
