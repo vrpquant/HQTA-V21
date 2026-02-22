@@ -263,7 +263,7 @@ class MarketScanner:
 st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="🏦")
 
 if 'data_feed' not in st.session_state:
-    st.session_state.data_feed = "Initializing..."
+    st.session_state.data_feed = "Establishing Secure Connection..."
 
 # --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
