@@ -57,52 +57,90 @@ class DataHandler:
 class AlphaEngine:
     @staticmethod
     def calculate_score(df):
+        """Multi-Factor Institutional Scoring Model"""
         try:
-            curr = df['Close'].iloc[-1]
-            sma50 = df['Close'].rolling(50).mean().iloc[-1]
-            sma200 = df['Close'].rolling(200).mean().iloc[-1]
-            vol = df['Close'].pct_change().std() * np.sqrt(252)
+            calc_df = df.copy().dropna()
+            
+            # 1. Trend Factor: Z-Score of the 50/200 SMA Spread
+            sma50 = calc_df['Close'].rolling(50).mean()
+            sma200 = calc_df['Close'].rolling(200).mean()
+            trend_spread = (sma50 - sma200) / sma200
+            trend_z = (trend_spread.iloc[-1] - trend_spread.mean()) / (trend_spread.std() + 1e-9)
+            
+            # 2. Mean Reversion Factor: 14-Period RSI
+            delta = calc_df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / (loss + 1e-9)
+            rsi = 100 - (100 / (1 + rs.iloc[-1]))
+            
+            # 3. Base Score Formulation
             score = 50 
             
-            if curr > sma50 > sma200: score += 30 
-            elif curr < sma50 < sma200: score -= 30 
-            elif curr > sma50: score += 10 
-            elif curr < sma50: score -= 10 
+            # Adjust based on Trend Z-Score (Capped at +/- 25 points)
+            score += max(-25, min(25, trend_z * 12.5))
             
-            mom = (curr / df['Close'].iloc[-10]) - 1
-            if mom > 0.05: score += 10
-            elif mom < -0.05: score -= 10
-            if vol > 0.50: score -= 10 
+            # Adjust based on Mean Reversion (Oversold = Bullish, Overbought = Bearish)
+            if rsi < 30: score += 15
+            elif rsi > 70: score -= 15
             
-            return max(0, min(100, score))
-        except: 
+            return max(0, min(100, int(score)))
+        except Exception: 
             return 50
 
 class BacktestEngine:
     @staticmethod
-    def run_quick_backtest(df):
+    def run_quick_backtest(df, slippage_bps=5, commission_bps=2):
+        """
+        Institutional Backtest Engine incorporating transaction friction,
+        execution delay, and Maximum Drawdown metrics.
+        """
         try:
-            bt_df = df.copy()
+            bt_df = df.copy().dropna()
+            
+            # 1. Signal Generation (Using 50/200 SMA as base logic)
             bt_df['SMA50'] = bt_df['Close'].rolling(50).mean()
             bt_df['SMA200'] = bt_df['Close'].rolling(200).mean()
-            # 1 for Golden Cross, -1 for Death Cross
-            bt_df['Signal'] = np.where(bt_df['SMA50'] > bt_df['SMA200'], 1, -1)
-            # Shift signal to prevent lookahead bias
-            bt_df['Signal'] = bt_df['Signal'].shift(1)
-            bt_df['Daily_Return'] = bt_df['Close'].pct_change()
-            bt_df['Strategy_Return'] = bt_df['Signal'] * bt_df['Daily_Return']
             
-            winning_days = (bt_df['Strategy_Return'] > 0).sum()
-            total_trades_days = (bt_df['Strategy_Return'] != 0).sum()
+            # 1 for Long, -1 for Short, 0 for Cash
+            bt_df['Target_Position'] = np.where(bt_df['SMA50'] > bt_df['SMA200'], 1, -1)
+            
+            # 2. Execution Delay (Shift by 1 to execute on the CLOSE of the signal day)
+            bt_df['Actual_Position'] = bt_df['Target_Position'].shift(1).fillna(0)
+            
+            # 3. Calculate Turnover (Change in position dictates friction costs)
+            bt_df['Turnover'] = bt_df['Actual_Position'].diff().abs().fillna(0)
+            
+            # 4. Raw Returns & Friction Application
+            bt_df['Underlying_Return'] = bt_df['Close'].pct_change().fillna(0)
+            bt_df['Gross_Strategy_Return'] = bt_df['Actual_Position'] * bt_df['Underlying_Return']
+            
+            # Apply cost: (Slippage + Commission) * Turnover
+            total_friction_pct = (slippage_bps + commission_bps) / 10000 
+            bt_df['Net_Strategy_Return'] = bt_df['Gross_Strategy_Return'] - (bt_df['Turnover'] * total_friction_pct)
+            
+            # 5. Performance Metrics
+            winning_days = (bt_df['Net_Strategy_Return'] > 0).sum()
+            total_trades_days = (bt_df['Actual_Position'] != 0).sum()
             win_rate = (winning_days / total_trades_days) * 100 if total_trades_days > 0 else 0
             
-            cumulative_return = (1 + bt_df['Strategy_Return'].dropna()).prod() - 1
-            buy_hold_return = (1 + bt_df['Daily_Return'].dropna()).prod() - 1
+            # Cumulative Returns
+            bt_df['Cumulative_Net'] = (1 + bt_df['Net_Strategy_Return']).cumprod() - 1
+            bt_df['Cumulative_Hold'] = (1 + bt_df['Underlying_Return']).cumprod() - 1
+            
+            cumulative_return = bt_df['Cumulative_Net'].iloc[-1]
+            buy_hold_return = bt_df['Cumulative_Hold'].iloc[-1]
             outperformance = cumulative_return - buy_hold_return
             
-            return win_rate, cumulative_return * 100, outperformance * 100
-        except:
-            return 0.0, 0.0, 0.0
+            # 6. Maximum Drawdown Calculation
+            bt_df['Peak'] = (1 + bt_df['Net_Strategy_Return']).cumprod().cummax()
+            bt_df['Drawdown'] = ((1 + bt_df['Net_Strategy_Return']).cumprod() - bt_df['Peak']) / bt_df['Peak']
+            max_drawdown = bt_df['Drawdown'].min() * 100 
+            
+            return win_rate, cumulative_return * 100, outperformance * 100, max_drawdown
+            
+        except Exception:
+            return 0.0, 0.0, 0.0, 0.0
 
 class QuantLogic:
     @staticmethod
@@ -145,6 +183,16 @@ class QuantLogic:
 
 class TradeArchitect:
     @staticmethod
+    def prob_itm(S, K, T, r, sigma, option_type='call'):
+        """Calculates Risk-Neutral Probability of Expiring In-The-Money using N(d2)"""
+        if T <= 0 or sigma <= 0: return 0.0
+        d2 = (np.log(S / K) + (r - 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+        if option_type == 'call':
+            return norm.cdf(d2)
+        else:
+            return norm.cdf(-d2)
+
+    @staticmethod
     def generate_plan(ticker, price, score, vol, sup, res):
         plan = {}
         if score >= 60: bias = "LONG (Bullish Trend)"
@@ -153,10 +201,11 @@ class TradeArchitect:
         
         vol_regime = "HIGH" if vol > 35 else "LOW"
         sigma = max(0.01, vol / 100) 
-        r = 0.04  # Assuming 4% risk-free rate
+        r = 0.04  # 4% risk-free rate
         T30 = 30 / 365 
         T60 = 60 / 365 
         
+        # Dynamic Level Adjustment
         if res <= price: res = price * 1.05
         if sup >= price: sup = price * 0.95
         
@@ -169,26 +218,32 @@ class TradeArchitect:
                 plan['legs'] = f"Buy ATM Call (${price:.0f}) / Sell Res Call (${res:.0f})"
                 debit = QuantLogic.bs_call(price, price, T30, r, sigma) - QuantLogic.bs_call(price, res, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                plan['pop'] = 62
+                breakeven = price + debit
+                plan['pop'] = int(TradeArchitect.prob_itm(price, breakeven, T30, r, sigma, 'call') * 100)
             else:
                 plan['name'] = "Short Put Vertical"
                 plan['legs'] = f"Sell Supp Put (${sup:.0f}) / Buy Wing Put (${lower_wing:.0f})"
                 credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
-                plan['pop'] = 78
+                prob_short_itm = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
+                plan['pop'] = int((1 - prob_short_itm) * 100)
+                
         elif "SHORT" in bias:
             if vol_regime == "LOW":
                 plan['name'] = "Long Put Vertical"
                 plan['legs'] = f"Buy ATM Put (${price:.0f}) / Sell Supp Put (${sup:.0f})"
                 debit = QuantLogic.bs_put(price, price, T30, r, sigma) - QuantLogic.bs_put(price, sup, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                plan['pop'] = 62
+                breakeven = price - debit
+                plan['pop'] = int(TradeArchitect.prob_itm(price, breakeven, T30, r, sigma, 'put') * 100)
             else:
                 plan['name'] = "Short Call Vertical"
                 plan['legs'] = f"Sell Res Call (${res:.0f}) / Buy Wing Call (${upper_wing:.0f})"
                 credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
-                plan['pop'] = 78
+                prob_short_itm = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
+                plan['pop'] = int((1 - prob_short_itm) * 100)
+                
         else:
             if vol_regime == "HIGH":
                 plan['name'] = "Iron Condor (Delta Neutral)"
@@ -196,29 +251,61 @@ class TradeArchitect:
                 put_credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 call_credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, put_credit + call_credit):.2f}"
-                plan['pop'] = 68
+                prob_call_itm = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
+                prob_put_itm = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
+                plan['pop'] = int((1 - (prob_call_itm + prob_put_itm)) * 100)
             else:
                 plan['name'] = "Calendar Spread"
                 plan['legs'] = f"Sell 30D Call (${price:.0f}) / Buy 60D Call (${price:.0f})"
                 debit = QuantLogic.bs_call(price, price, T60, r, sigma) - QuantLogic.bs_call(price, price, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                plan['pop'] = 55
+                plan['pop'] = 50 
                 
-        plan['dte'] = "30-45 Days"
+        plan['dte'] = "30 Days"
         plan['bias'] = bias
         return plan
 
 class MonteCarloEngine:
     @staticmethod
-    def simulate_paths(df, days=30, sims=1000):
+    def simulate_paths(df, days=30, sims=1000, jump_intensity=1.5, jump_mean=-0.02, jump_std=0.05):
+        """Institutional Monte Carlo using Merton Jump-Diffusion Process."""
+        try:
+            last_price = df['Close'].iloc[-1]
+            returns = np.log(df['Close'] / df['Close'].shift(1)).dropna()
+            mu_hist, sigma_hist = returns.mean(), returns.std()
+            dt = 1 / 252 
+
+            lambda_dt = jump_intensity * dt 
+            jump_expected_return = lambda_dt * (np.exp(jump_mean + 0.5 * jump_std**2) - 1) 
+            drift_adj = mu_hist - 0.5 * sigma_hist**2 - jump_expected_return
+
+            z1 = np.random.normal(0, 1, (days, sims))
+            diffusion = np.exp(drift_adj * dt + sigma_hist * np.sqrt(dt) * z1)
+
+            jump_occurred = np.random.poisson(lambda_dt, (days, sims))
+            jump_size = np.random.normal(jump_mean, jump_std, (days, sims))
+            jump_factor = np.exp(jump_occurred * jump_size)
+
+            daily_factors = diffusion * jump_factor
+            price_paths = np.zeros((days + 1, sims))
+            price_paths[0] = last_price
+            price_paths[1:] = last_price * np.cumprod(daily_factors, axis=0)
+            
+            return pd.DataFrame(price_paths)
+
+        except Exception as e:
+            st.warning(f"Monte Carlo degraded to simple random walk due to calculation error: {e}")
+            return MonteCarloEngine._simple_random_walk(df, days, sims)
+
+    @staticmethod
+    def _simple_random_walk(df, days, sims):
         last_price = df['Close'].iloc[-1]
         returns = df['Close'].pct_change().dropna()
         mu, sigma = returns.mean(), returns.std()
         daily_shocks = np.random.normal(mu, sigma, (days, sims))
         price_paths = last_price * (1 + daily_shocks).cumprod(axis=0)
         start_row = np.full((1, sims), last_price)
-        price_paths = np.vstack([start_row, price_paths])
-        return pd.DataFrame(price_paths)
+        return pd.DataFrame(np.vstack([start_row, price_paths]))
 
 class MarketScanner:
     @staticmethod
@@ -291,7 +378,6 @@ def check_login():
         
     if not st.session_state.authenticated:
         st.markdown("## 🔒 HQTA Terminal Login")
-        # Removed the test account banner for production!
         
         c1, c2 = st.columns([1, 2])
         with c1:
@@ -313,12 +399,10 @@ def check_login():
         
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
-            # --- PASTE YOUR PAYPAL ANALYST LINK BELOW ---
             st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
             
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
-            # --- PASTE YOUR PAYPAL GOD MODE LINK BELOW ---
             st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
             
         st.markdown("---")
@@ -425,7 +509,8 @@ if check_login():
                     sharpe = QuantLogic.calculate_sharpe(df)
                     vrp_edge = QuantLogic.calculate_vrp_edge(df)
                     
-                    win_rate, strat_ret, outperf = BacktestEngine.run_quick_backtest(df)
+                    # Unpacking the upgraded 4-variable Backtest return
+                    win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
                     
                     st.markdown("### 📊 Market Variables")
@@ -442,17 +527,18 @@ if check_login():
                     m8.metric("Resistance (Ceiling)", f"${res:.2f}")
                     
                     st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
-                    b1, b2, b3 = st.columns(3)
-                    b1.metric("Historical Win Rate", f"{win_rate:.1f}%", help="Percentage of profitable daily holds under current trend logic")
-                    b2.metric("Strategy Return", f"{strat_ret:+.1f}%")
-                    b3.metric("Alpha Generated (vs Buy/Hold)", f"{outperf:+.1f}%", delta_color="normal")
+                    b1, b2, b3, b4 = st.columns(4)
+                    b1.metric("Historical Win Rate", f"{win_rate:.1f}%", help="Percentage of profitable holds under current trend logic")
+                    b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%", help="Return after simulated slippage and commissions")
+                    b3.metric("Alpha Generated", f"{outperf:+.1f}%", delta_color="normal", help="Outperformance vs standard Buy & Hold")
+                    b4.metric("Max Drawdown", f"{max_dd:.1f}%", delta_color="inverse", help="Largest peak-to-trough drop")
                     
                     st.markdown("### 🎯 Optimal Trade Architecture")
                     st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
                     
                     s1, s2, s3 = st.columns(3)
                     s1.metric("Est. Execution Target", plan['premium'], help="Priced via Black-Scholes Model")
-                    s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
+                    s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%", help="Dynamic N(d2) Risk-Neutral Probability")
                     s3.metric("Ideal DTE", plan['dte'])
                     
                     sims = 10000 if tier == "GOD_MODE" else 1000
@@ -465,7 +551,7 @@ if check_login():
                     fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
                     fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
                     
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
+                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)")
                     st.plotly_chart(fig, use_container_width=True)
                     
                     r1, r2 = st.columns(2)
@@ -473,7 +559,7 @@ if check_login():
                     
                     if tier == "GOD_MODE":
                         var_99 = np.percentile(mc_df.iloc[-1], 1)
-                        r2.metric("99% Black Swan Level", f"${var_99:.2f}", delta_color="inverse", help="1% Tail Risk")
+                        r2.metric("99% Black Swan Level", f"${var_99:.2f}", delta_color="inverse", help="1% Tail Risk (Fat Tails Modeled)")
                         status = "GOD MODE - DEEP COMPUTE VERIFIED"
                     else:
                         r2.metric("99% Black Swan", "🔒 LOCKED", help="Upgrade to God Mode")
@@ -494,22 +580,23 @@ Sharpe Ratio: {sharpe:.2f}
 
 BACKTEST VALIDATION (2-YEAR):
 Historical Win Rate: {win_rate:.1f}%
-Strategy Cumulative Return: {strat_ret:+.1f}%
+Net Strategy Cumulative Return: {strat_ret:+.1f}%
 Alpha Generated vs Buy & Hold: {outperf:+.1f}%
+Maximum Drawdown: {max_dd:.1f}%
 
 TECHNICAL LEVELS:
 Support (Floor): ${sup:.2f}
 Resistance (Ceiling): ${res:.2f}
 Historical Volatility: {vol:.1f}%
 
-STRATEGY ARCHITECT:
+STRATEGY ARCHITECT (N(d2) Risk-Neutral):
 Recommended Strategy: {plan['name']}
 Execution Legs: {plan['legs']}
 Black-Scholes Pricing: {plan['premium']}
 Probability of Profit (POP): {plan['pop']}%
 Optimal Horizon (DTE): {plan['dte']}
 
-RISK ANALYSIS:
+RISK ANALYSIS (Merton Jump-Diffusion):
 95% Value at Risk Limit: ${var_95:.2f}
 """
                     st.download_button("💾 Download Trade Plan (TXT)", report_txt, f"{ticker}_VRP_Trade_Plan.txt")
