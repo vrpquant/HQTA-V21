@@ -340,11 +340,8 @@ if check_login():
         
         st.markdown("---")
         st.caption("SYSTEM STATUS")
-        if "Schwab" in st.session_state.data_feed:
-            st.success(f"📡 {st.session_state.data_feed}")
-        else:
-            st.warning(f"📡 {st.session_state.data_feed}")
-            
+        st.success(f"🟢 {st.session_state.data_feed}")
+        
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
     # === MODULE 1: MARKET Scanner ===
