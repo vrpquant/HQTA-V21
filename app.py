@@ -269,6 +269,7 @@ if 'data_feed' not in st.session_state:
 try:
         USERS = {
         "admin": {"password": st.secrets["ADMIN_PW"], "tier": "GOD_MODE"},
+        "beta_tester": {"password": st.secrets["BETA_PW"], "tier": "ANALYST"},
         "guest": {"password": st.secrets["GUEST_PW"], "tier": "ANALYST"},
         "john": {"password": st.secrets["JOHN_PW"], "tier": "ANALYST"}
     }
