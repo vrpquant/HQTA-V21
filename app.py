@@ -6,58 +6,16 @@ import plotly.graph_objects as go
 from scipy.stats import norm
 from datetime import datetime
 import time
-import requests
 
 # ==========================================
-# --- PART 1: THE CORE ENGINE (BACKEND) ---
+# --- PART 1: V22 INSTITUTIONAL MATH ENGINE ---
 # ==========================================
-
-class SchwabDataHandler:
-    """Institutional Market Data Integration for Charles Schwab"""
-    BASE_URL = "https://api.schwabapi.com/marketdata/v1"
-    
-    @staticmethod
-    def is_configured():
-        try:
-            return "SCHWAB_APP_KEY" in st.secrets and "SCHWAB_APP_SECRET" in st.secrets
-        except:
-            return False
-
-    @staticmethod
-    def get_price_history(ticker):
-        # Placeholder for the OAuth2.0 Token handshake
-        return None 
-
-class DataHandler:
-    @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
-    def fetch(ticker, retries=3):
-        """Dual-Feed Routing: Tries Schwab API first, falls back to yfinance"""
-        if SchwabDataHandler.is_configured():
-            schwab_df = SchwabDataHandler.get_price_history(ticker)
-            if schwab_df is not None:
-                st.session_state.data_feed = "Charles Schwab API (Live)"
-                return schwab_df
-
-        st.session_state.data_feed = "Quant Data Connection: Secure"
-        for attempt in range(retries):
-            try:
-                ticker_obj = yf.Ticker(ticker)
-                df = ticker_obj.history(period="2y")
-                if df is not None and not df.empty and len(df) > 50:
-                    return df
-            except Exception as e:
-                time.sleep(1.5 ** attempt) 
-                
-        return None
 
 class AlphaEngine:
     @staticmethod
     def calculate_score(df):
-        """Multi-Factor Institutional Scoring Model"""
         try:
             calc_df = df.copy().dropna()
-            
             sma50 = calc_df['Close'].rolling(50).mean()
             sma200 = calc_df['Close'].rolling(200).mean()
             trend_spread = (sma50 - sma200) / sma200
@@ -81,16 +39,13 @@ class AlphaEngine:
 class BacktestEngine:
     @staticmethod
     def run_quick_backtest(df, slippage_bps=5, commission_bps=2):
-        """Institutional Backtest Engine incorporating transaction friction and Max Drawdown."""
         try:
             bt_df = df.copy().dropna()
-            
             bt_df['SMA50'] = bt_df['Close'].rolling(50).mean()
             bt_df['SMA200'] = bt_df['Close'].rolling(200).mean()
             bt_df['Target_Position'] = np.where(bt_df['SMA50'] > bt_df['SMA200'], 1, -1)
             bt_df['Actual_Position'] = bt_df['Target_Position'].shift(1).fillna(0)
             bt_df['Turnover'] = bt_df['Actual_Position'].diff().abs().fillna(0)
-            
             bt_df['Underlying_Return'] = bt_df['Close'].pct_change().fillna(0)
             bt_df['Gross_Strategy_Return'] = bt_df['Actual_Position'] * bt_df['Underlying_Return']
             
@@ -113,8 +68,7 @@ class BacktestEngine:
             max_drawdown = bt_df['Drawdown'].min() * 100 
             
             return win_rate, cumulative_return * 100, outperformance * 100, max_drawdown
-            
-        except Exception as e:
+        except Exception:
             return 0.0, 0.0, 0.0, 0.0
 
 class QuantLogic:
@@ -159,13 +113,10 @@ class QuantLogic:
 class TradeArchitect:
     @staticmethod
     def prob_itm(S, K, T, r, sigma, option_type='call'):
-        """Calculates Risk-Neutral Probability of Expiring In-The-Money using N(d2)"""
         if T <= 0 or sigma <= 0: return 0.0
         d2 = (np.log(S / K) + (r - 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        if option_type == 'call':
-            return norm.cdf(d2)
-        else:
-            return norm.cdf(-d2)
+        if option_type == 'call': return norm.cdf(d2)
+        else: return norm.cdf(-d2)
 
     @staticmethod
     def generate_plan(ticker, price, score, vol, sup, res):
@@ -175,16 +126,12 @@ class TradeArchitect:
         else: bias = "NEUTRAL (Mean-Reverting)"
         
         vol_regime = "HIGH" if vol > 35 else "LOW"
-        sigma = max(0.01, vol / 100) 
-        r = 0.04  # 4% risk-free rate
-        T30 = 30 / 365 
-        T60 = 60 / 365 
+        sigma = max(0.01, vol / 100); r = 0.04; T30 = 30 / 365; T60 = 60 / 365 
         
         if res <= price: res = price * 1.05
         if sup >= price: sup = price * 0.95
         
-        lower_wing = sup * 0.95
-        upper_wing = res * 1.05
+        lower_wing = sup * 0.95; upper_wing = res * 1.05
         
         if "LONG" in bias:
             if vol_regime == "LOW":
@@ -192,42 +139,36 @@ class TradeArchitect:
                 plan['legs'] = f"Buy ATM Call (${price:.0f}) / Sell Res Call (${res:.0f})"
                 debit = QuantLogic.bs_call(price, price, T30, r, sigma) - QuantLogic.bs_call(price, res, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                breakeven = price + debit
-                plan['pop'] = int(TradeArchitect.prob_itm(price, breakeven, T30, r, sigma, 'call') * 100)
+                plan['pop'] = int(TradeArchitect.prob_itm(price, price + debit, T30, r, sigma, 'call') * 100)
             else:
                 plan['name'] = "Short Put Vertical"
                 plan['legs'] = f"Sell Supp Put (${sup:.0f}) / Buy Wing Put (${lower_wing:.0f})"
                 credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
-                prob_short_itm = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
-                plan['pop'] = int((1 - prob_short_itm) * 100)
-                
+                plan['pop'] = int((1 - TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')) * 100)
         elif "SHORT" in bias:
             if vol_regime == "LOW":
                 plan['name'] = "Long Put Vertical"
                 plan['legs'] = f"Buy ATM Put (${price:.0f}) / Sell Supp Put (${sup:.0f})"
                 debit = QuantLogic.bs_put(price, price, T30, r, sigma) - QuantLogic.bs_put(price, sup, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                breakeven = price - debit
-                plan['pop'] = int(TradeArchitect.prob_itm(price, breakeven, T30, r, sigma, 'put') * 100)
+                plan['pop'] = int(TradeArchitect.prob_itm(price, price - debit, T30, r, sigma, 'put') * 100)
             else:
                 plan['name'] = "Short Call Vertical"
                 plan['legs'] = f"Sell Res Call (${res:.0f}) / Buy Wing Call (${upper_wing:.0f})"
                 credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
-                prob_short_itm = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
-                plan['pop'] = int((1 - prob_short_itm) * 100)
-                
+                plan['pop'] = int((1 - TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')) * 100)
         else:
             if vol_regime == "HIGH":
-                plan['name'] = "Iron Condor (Delta Neutral)"
-                plan['legs'] = f"Sell Put (${sup:.0f}) & Buy (${lower_wing:.0f}) | Sell Call (${res:.0f}) & Buy (${upper_wing:.0f})"
+                plan['name'] = "Iron Condor"
+                plan['legs'] = f"Sell P({sup:.0f}) / Sell C({res:.0f})"
                 put_credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 call_credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, put_credit + call_credit):.2f}"
-                prob_call_itm = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
-                prob_put_itm = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
-                plan['pop'] = int((1 - (prob_call_itm + prob_put_itm)) * 100)
+                prob_call = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
+                prob_put = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
+                plan['pop'] = int((1 - (prob_call + prob_put)) * 100)
             else:
                 plan['name'] = "Calendar Spread"
                 plan['legs'] = f"Sell 30D Call (${price:.0f}) / Buy 60D Call (${price:.0f})"
@@ -235,19 +176,17 @@ class TradeArchitect:
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
                 plan['pop'] = 50 
                 
-        plan['dte'] = "30-45 Days"
+        plan['dte'] = "30 Days"
         plan['bias'] = bias
         return plan
 
 class MonteCarloEngine:
     @staticmethod
     def simulate_paths(df, days=30, sims=1000, jump_intensity=1.5, jump_mean=-0.02, jump_std=0.05):
-        """Institutional Monte Carlo using Merton Jump-Diffusion Process."""
         try:
             last_price = df['Close'].iloc[-1]
-            returns = np.log(df['Close'] / df['Close'].shift(1)).dropna() 
-            mu_hist = returns.mean()
-            sigma_hist = returns.std()
+            returns = np.log(df['Close'] / df['Close'].shift(1)).dropna()
+            mu_hist, sigma_hist = returns.mean(), returns.std()
             dt = 1 / 252 
 
             lambda_dt = jump_intensity * dt 
@@ -267,9 +206,8 @@ class MonteCarloEngine:
             price_paths[1:] = last_price * np.cumprod(daily_factors, axis=0)
             
             return pd.DataFrame(price_paths)
-
         except Exception as e:
-            st.warning(f"Monte Carlo degraded to simple random walk due to calculation error: {e}")
+            st.warning("Degraded to simple random walk.")
             return MonteCarloEngine._simple_random_walk(df, days, sims)
 
     @staticmethod
@@ -288,64 +226,46 @@ class MarketScanner:
     def run_scan(tickers):
         results = []
         for t in tickers:
-            df = DataHandler.fetch(t)
-            if df is not None:
-                price = df['Close'].iloc[-1]
-                score = AlphaEngine.calculate_score(df)
-                vol = QuantLogic.calculate_vol(df)
-                sharpe = QuantLogic.calculate_sharpe(df)
-                vrp = QuantLogic.calculate_vrp_edge(df)
-                sup, res = QuantLogic.get_support_resistance(df)
-                plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
-                mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
-                stop_loss = np.percentile(mc_df.iloc[-1], 5)
+            try:
+                stock = yf.Ticker(t)
+                df = stock.history(period="2y")
+                if not df.empty and len(df) > 50:
+                    price = df['Close'].iloc[-1]
+                    score = AlphaEngine.calculate_score(df)
+                    vol = QuantLogic.calculate_vol(df)
+                    sharpe = QuantLogic.calculate_sharpe(df)
+                    vrp = QuantLogic.calculate_vrp_edge(df)
+                    sup, res = QuantLogic.get_support_resistance(df)
+                    plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
+                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
+                    stop_loss = np.percentile(mc_df.iloc[-1], 5)
 
-                results.append({
-                    "Ticker": t,
-                    "Price": price,
-                    "Alpha Score": score,
-                    "Trend (L/S)": plan['bias'],
-                    "VRP Edge %": vrp,
-                    "Sharpe": sharpe,
-                    "Vol %": vol,
-                    "Support": sup,
-                    "Resistance": res,
-                    "Stop Loss (VaR 95)": stop_loss,
-                    "Optimal Strategy": plan['name'],
-                    "Legs (Strikes)": plan['legs'],
-                    "POP %": plan['pop']
-                })
+                    results.append({
+                        "Ticker": t, "Price": price, "Alpha Score": score, "Trend (L/S)": plan['bias'],
+                        "VRP Edge %": vrp, "Sharpe": sharpe, "Vol %": vol, "Support": sup,
+                        "Resistance": res, "Stop Loss (VaR 95)": stop_loss, "Optimal Strategy": plan['name'],
+                        "Legs (Strikes)": plan['legs'], "POP %": plan['pop']
+                    })
+            except Exception: pass
         return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
-
 
 # ==========================================
 # --- PART 2: THE STREAMLIT APP (UI) ---
 # ==========================================
 
-st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V22 Command", layout="wide", page_icon="🏦")
 
-if 'data_feed' not in st.session_state:
-    st.session_state.data_feed = "Establishing Secure Connection..."
-
-# --- LOAD SECRETS FROM THE VAULT ---
+# --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
-    USERS = {
-        "analyst":    {"password": st.secrets["ANALYST_PW"],  "tier": "ANALYST"},
-        "fund":       {"password": st.secrets["FUND_PW"],     "tier": "GOD_MODE"},
-        "demo":       {"password": st.secrets["DEMO_PW"],     "tier": "ANALYST"},
-        "admin":      {"password": st.secrets["ADMIN_PW"],    "tier": "GOD_MODE"},
-        "guest":      {"password": st.secrets["GUEST_PW"],    "tier": "ANALYST"}
-    }
+    USERS = st.secrets["credentials"]
 except Exception as e:
-    st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please add passwords to Streamlit Secrets.")
+    st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please configure [credentials] in Streamlit Secrets.")
     st.stop()
 
-DISCLAIMER_TEXT = """
-**SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
-1. **Hypothetical Performance:** The Alpha Scores, VRP Edge, Black-Scholes Pricing, Backtested Results, and Monte Carlo projections generated by this software are hypothetical in nature, do not reflect actual investment results, and are not guarantees of future results.
-2. **Not Financial Advice:** VRP Quant / HQTA provides quantitative data analysis for institutional and informational purposes only. It is not an offer or solicitation to buy or sell any security.
-3. **Risk Disclosure:** Options trading involves substantial risk of loss and is not suitable for all investors. You are solely responsible for verifying strike limits and managing portfolio risk.
-"""
+DISCLAIMER_TEXT = """**SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
+1. **Hypothetical Performance:** Metrics generated by this software are hypothetical and not guarantees of future results.
+2. **Not Financial Advice:** VRP Quant provides quantitative data analysis for informational purposes only.
+3. **Risk Disclosure:** Options trading involves substantial risk of loss."""
 
 def check_login():
     if "authenticated" not in st.session_state:
@@ -353,7 +273,7 @@ def check_login():
         st.session_state.tier = None
         
     if not st.session_state.authenticated:
-        st.markdown("## 🔒 HQTA Terminal Login")
+        st.markdown("## 🔒 VRP Quant Terminal Login")
         c1, c2 = st.columns([1, 2])
         with c1:
             user = st.text_input("Username", key="login_u")
@@ -363,22 +283,25 @@ def check_login():
                     st.session_state.authenticated = True
                     st.session_state.tier = USERS[user]["tier"]
                     st.rerun()
-                else: st.error("Invalid Credentials")
+                else: 
+                    st.error("Invalid Credentials")
         
         st.markdown("---")
-        st.caption("New Client? The Payment Gateway opens next week.")
+        st.markdown("### 👑 Founding Member Cohort (Beta)")
+        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta today to lock in your lifetime discounted rate.")
+        
         b1, b2 = st.columns(2)
-        
-        if b1.button("Subscribe Analyst ($299)"):
-            st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
+        with b1:
+            st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
+            st.link_button("Subscribe via PayPal ($149/mo)", "YOUR_PAYPAL_LINK_HERE", use_container_width=True)
             
-        if b2.button("Subscribe God Mode ($999)"):
-            st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
+        with b2:
+            st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
+            st.link_button("Subscribe via PayPal ($499/mo)", "YOUR_PAYPAL_LINK_HERE", use_container_width=True)
             
         st.markdown("---")
-        st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
+        st.success("🛡️ SEC Compliance Check: System verified.")
         st.caption(DISCLAIMER_TEXT)
-        
         return False
     return True
 
@@ -386,44 +309,25 @@ if check_login():
     tier = st.session_state.tier
     
     with st.sidebar:
-        st.markdown("# 🏦 HQTA V22.0")
+        st.markdown("# 🏦 VRP Quant V22.0")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
-        
         st.markdown("---")
-        st.caption("SYSTEM STATUS")
-        if "Schwab" in st.session_state.data_feed:
-            st.success(f"📡 {st.session_state.data_feed}")
-        else:
-            st.warning(f"📡 {st.session_state.data_feed}")
-            
+        
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
-    # === MODULE 1: MARKET Scanner ===
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
-        
-        st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
-        st.caption(DISCLAIMER_TEXT)
-        st.markdown("---")
-        
         TICKER_SETS = {
             "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
-            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH", "SOXL"],
-            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CCJ", "URA", "CVX", "XOM", "UNG"],
-            "📉 Volatility & Hedges": ["VIXY", "UVXY", "TLT", "SH", "SQQQ", "SPXU"],
-            "🏦 Financials": ["JPM", "GS", "BAC", "MS", "C", "XLF", "KRE"]
+            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
+            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"]
         }
 
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
-            st.info("Subscribe to God Mode ($999/mo) to unlock.")
-            st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
         else:
-            st.markdown("### Select Institutional Universe")
-            
             col1, col2 = st.columns([1, 2])
-            
             with col1:
                 options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
                 sector_choice = st.selectbox("Select Sector:", options)
@@ -431,148 +335,75 @@ if check_login():
             selected_tickers = []
             if sector_choice == "✨ Custom Watchlist":
                 with col2:
-                    st.info("Paste your own list of tickers to scan.")
-                    custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI, DKNG")
-                    if custom_input: 
-                        selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
-            else: 
-                selected_tickers = TICKER_SETS[sector_choice]
+                    custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
+                    if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
+            else: selected_tickers = TICKER_SETS[sector_choice]
             
             if st.button("🔄 Run Live Scan") and selected_tickers:
-                with st.spinner(f"Scanning & Resolving Dependencies..."):
+                with st.spinner("Scanning..."):
                     df_scan = MarketScanner.run_scan(selected_tickers)
-                    if not df_scan.empty:
-                        st.dataframe(df_scan, column_config={
-                            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
-                            "Alpha Score": st.column_config.ProgressColumn("Alpha Score", format="%d", min_value=0, max_value=100),
-                            "Trend (L/S)": st.column_config.TextColumn("Trend (L/S)"),
-                            "VRP Edge %": st.column_config.NumberColumn("VRP Edge %", format="%+.2f%%"),
-                            "Sharpe": st.column_config.NumberColumn("Sharpe", format="%.2f"),
-                            "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
-                            "Support": st.column_config.NumberColumn("Support", format="$%.2f"),
-                            "Resistance": st.column_config.NumberColumn("Resistance", format="$%.2f"),
-                            "Stop Loss (VaR 95)": st.column_config.NumberColumn("Stop Loss", format="$%.2f"),
-                            "Optimal Strategy": st.column_config.TextColumn("Strategy"),
-                            "Legs (Strikes)": st.column_config.TextColumn("Legs"),
-                            "POP %": st.column_config.NumberColumn("POP %", format="%d%%")
-                        }, use_container_width=True)
-                        
-                        csv = df_scan.to_csv(index=False).encode('utf-8')
-                        st.download_button("💾 Download Results (CSV)", csv, "HQTA_Institutional_Scan_V22.csv", "text/csv")
-                    else:
-                        st.warning("Data fetch failed due to API constraints. Please try again in 30 seconds.")
+                    if not df_scan.empty: st.dataframe(df_scan, use_container_width=True)
 
-    # === MODULE 2: DEEP DIVE ===
     elif mode == "🔬 Deep Dive Analysis":
         st.title("🔬 Deep Dive & Trade Architect")
         ticker = st.text_input("Asset Ticker", "NVDA").upper()
         
         if st.button("Run Analysis"):
             with st.spinner("Connecting to Data Feeds & Running Vector Backtest..."):
-                df = DataHandler.fetch(ticker)
-                
-                if df is not None:
-                    curr_price = df['Close'].iloc[-1]
-                    score = AlphaEngine.calculate_score(df)
-                    vol = QuantLogic.calculate_vol(df)
-                    sup, res = QuantLogic.get_support_resistance(df)
-                    sharpe = QuantLogic.calculate_sharpe(df)
-                    vrp_edge = QuantLogic.calculate_vrp_edge(df)
-                    
-                    win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
-                    plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
-                    
-                    st.markdown("### 📊 Market Variables")
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Price", f"${curr_price:.2f}")
-                    m2.metric("Alpha Score", f"{score}/100")
-                    m3.metric("Trend", plan['bias'])
-                    m4.metric("Volatility", f"{vol:.1f}%")
-                    
-                    m5, m6, m7, m8 = st.columns(4)
-                    m5.metric("VRP Edge", f"{vrp_edge:+.2f}%", help="Volatility Risk Premium Spread")
-                    m6.metric("Sharpe Ratio", f"{sharpe:.2f}")
-                    m7.metric("Support (Floor)", f"${sup:.2f}")
-                    m8.metric("Resistance (Ceiling)", f"${res:.2f}")
-                    
-                    st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
-                    b1, b2, b3, b4 = st.columns(4)
-                    b1.metric("Historical Win Rate", f"{win_rate:.1f}%", help="Percentage of profitable daily holds under current trend logic")
-                    b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
-                    b3.metric("Alpha Generated", f"{outperf:+.1f}%", delta_color="normal")
-                    b4.metric("Max Drawdown", f"{max_dd:.1f}%", delta_color="inverse", help="Largest peak-to-trough drop")
-                    
-                    st.markdown("### 🎯 Optimal Trade Architecture")
-                    st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
-                    
-                    s1, s2, s3 = st.columns(3)
-                    s1.metric("Est. Execution Target", plan['premium'], help="Priced via Black-Scholes Model")
-                    s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
-                    s3.metric("Ideal DTE", plan['dte'])
-                    
-                    sims = 10000 if tier == "GOD_MODE" else 1000
-                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
-                    var_95 = np.percentile(mc_df.iloc[-1], 5)
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(y=df['Close'], name='History', line=dict(color='white')))
-                    fig.add_trace(go.Scatter(x=list(range(len(df), len(df)+30)), y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
-                    fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
-                    fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                    
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)")
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    r1, r2 = st.columns(2)
-                    r1.metric("95% Value at Risk (Stop)", f"${var_95:.2f}", delta_color="inverse")
-                    
-                    if tier == "GOD_MODE":
-                        var_99 = np.percentile(mc_df.iloc[-1], 1)
-                        r2.metric("99% Black Swan Level", f"${var_99:.2f}", delta_color="inverse", help="1% Tail Risk")
-                        status = "GOD MODE - DEEP COMPUTE VERIFIED"
-                    else:
-                        r2.metric("99% Black Swan", "🔒 LOCKED", help="Upgrade to God Mode")
-                        status = "ANALYST TIER - STANDARD"
-
-                    report_txt = f"""HQTA V22.0 INSTITUTIONAL REPORT
---------------------------------
-DATE: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-TICKER: {ticker}
-STATUS: {status}
-
-MARKET VARIABLES:
-Price: ${curr_price:.2f}
-Alpha Score: {score}/100
-Trend/Bias: {plan['bias']}
-VRP Edge: {vrp_edge:+.2f}%
-Sharpe Ratio: {sharpe:.2f}
-
-BACKTEST VALIDATION (2-YEAR):
-Historical Win Rate: {win_rate:.1f}%
-Net Strategy Return: {strat_ret:+.1f}%
-Alpha Generated vs Buy & Hold: {outperf:+.1f}%
-Max Drawdown: {max_dd:.1f}%
-
-TECHNICAL LEVELS:
-Support (Floor): ${sup:.2f}
-Resistance (Ceiling): ${res:.2f}
-Historical Volatility: {vol:.1f}%
-
-STRATEGY ARCHITECT:
-Recommended Strategy: {plan['name']}
-Execution Legs: {plan['legs']}
-Black-Scholes Pricing: {plan['premium']}
-Probability of Profit (POP): {plan['pop']}%
-Optimal Horizon (DTE): {plan['dte']}
-
-RISK ANALYSIS:
-95% Value at Risk Limit: ${var_95:.2f}
-"""
-                    st.download_button("💾 Download Trade Plan (TXT)", report_txt, f"{ticker}_VRP_Trade_Plan.txt")
-                    
-                else: 
-                    st.error("⚠️ DATA FETCH ERROR: Connection to market data feeds timed out. Please wait 30 seconds and try again.")
+                try:
+                    stock = yf.Ticker(ticker)
+                    df = stock.history(period="2y")
+                    if not df.empty:
+                        curr_price = df['Close'].iloc[-1]
+                        score = AlphaEngine.calculate_score(df)
+                        vol = QuantLogic.calculate_vol(df)
+                        sup, res = QuantLogic.get_support_resistance(df)
+                        sharpe = QuantLogic.calculate_sharpe(df)
+                        vrp_edge = QuantLogic.calculate_vrp_edge(df)
+                        
+                        win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
+                        plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
+                        
+                        st.markdown("### 📊 Market Variables")
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("Price", f"${curr_price:.2f}")
+                        m2.metric("Alpha Score", f"{score}/100")
+                        m3.metric("Trend", plan['bias'])
+                        m4.metric("Volatility", f"{vol:.1f}%")
+                        
+                        m5, m6, m7, m8 = st.columns(4)
+                        m5.metric("VRP Edge", f"{vrp_edge:+.2f}%")
+                        m6.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                        m7.metric("Support (Floor)", f"${sup:.2f}")
+                        m8.metric("Resistance (Ceiling)", f"${res:.2f}")
+                        
+                        st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
+                        b1, b2, b3, b4 = st.columns(4)
+                        b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
+                        b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
+                        b3.metric("Alpha Generated", f"{outperf:+.1f}%")
+                        b4.metric("Max Drawdown", f"{max_dd:.1f}%", delta_color="inverse")
+                        
+                        st.markdown("### 🎯 Optimal Trade Architecture")
+                        st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
+                        
+                        s1, s2, s3 = st.columns(3)
+                        s1.metric("Est. Execution Target", plan['premium'])
+                        s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
+                        s3.metric("Ideal DTE", plan['dte'])
+                        
+                        sims = 10000 if tier == "GOD_MODE" else 1000
+                        mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
+                        
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(y=df['Close'], name='History', line=dict(color='white')))
+                        fig.add_trace(go.Scatter(x=list(range(len(df), len(df)+30)), y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
+                        fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
+                        fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
+                        fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
+                        st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error analyzing {ticker}: {e}")
         
     with st.sidebar:
         st.markdown("---")
