@@ -330,10 +330,11 @@ if 'data_feed' not in st.session_state:
 # --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
     USERS = {
-        "admin": {"password": st.secrets["ADMIN_PW"], "tier": "GOD_MODE"},
-        "beta_tester": {"password": st.secrets["BETA_PW"], "tier": "ANALYST"},
-        "guest": {"password": st.secrets["GUEST_PW"], "tier": "ANALYST"},
-        "john": {"password": st.secrets["JOHN_PW"], "tier": "ANALYST"}
+        "analyst":    {"password": st.secrets["ANALYST_PW"],  "tier": "ANALYST"},
+        "fund":       {"password": st.secrets["FUND_PW"],     "tier": "GOD_MODE"},
+        "demo":       {"password": st.secrets["DEMO_PW"],     "tier": "ANALYST"},
+        "admin":      {"password": st.secrets["ADMIN_PW"],    "tier": "GOD_MODE"},
+        "guest":      {"password": st.secrets["GUEST_PW"],    "tier": "ANALYST"}
     }
 except Exception as e:
     st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please add passwords to Streamlit Secrets.")
