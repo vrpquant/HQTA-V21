@@ -235,7 +235,7 @@ class TradeArchitect:
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
                 plan['pop'] = 50 
                 
-        plan['dte'] = "30 Days"
+        plan['dte'] = "30-45 Days"
         plan['bias'] = bias
         return plan
 
@@ -327,7 +327,7 @@ st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="�
 if 'data_feed' not in st.session_state:
     st.session_state.data_feed = "Establishing Secure Connection..."
 
-# --- SECURE PRODUCTION USERS DICTIONARY ---
+# --- LOAD SECRETS FROM THE VAULT ---
 try:
     USERS = {
         "analyst":    {"password": st.secrets["ANALYST_PW"],  "tier": "ANALYST"},
@@ -354,7 +354,6 @@ def check_login():
         
     if not st.session_state.authenticated:
         st.markdown("## 🔒 HQTA Terminal Login")
-        
         c1, c2 = st.columns([1, 2])
         with c1:
             user = st.text_input("Username", key="login_u")
@@ -364,22 +363,17 @@ def check_login():
                     st.session_state.authenticated = True
                     st.session_state.tier = USERS[user]["tier"]
                     st.rerun()
-                else: 
-                    st.error("Invalid Credentials")
+                else: st.error("Invalid Credentials")
         
         st.markdown("---")
-        st.markdown("### 👑 Founding Member Cohort (Beta)")
-        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta cohort today to lock in your lifetime discounted rate.")
-        
+        st.caption("New Client? The Payment Gateway opens next week.")
         b1, b2 = st.columns(2)
         
-        with b1:
-            st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
-            st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
+        if b1.button("Subscribe Analyst ($299)"):
+            st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
             
-        with b2:
-            st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
-            st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
+        if b2.button("Subscribe God Mode ($999)"):
+            st.info("🚧 The Stripe Gateway is currently locked for Beta Testing. DM the founder 'WAITLIST' to secure your spot.")
             
         st.markdown("---")
         st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
@@ -393,15 +387,16 @@ if check_login():
     
     with st.sidebar:
         st.markdown("# 🏦 HQTA V22.0")
-        if tier == "GOD_MODE": 
-            st.success("🔓 GOD MODE ACTIVE")
-        else: 
-            st.warning("🔒 ANALYST TIER")
+        if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
+        else: st.warning("🔒 ANALYST TIER")
         
         st.markdown("---")
         st.caption("SYSTEM STATUS")
-        st.success(f"🟢 {st.session_state.data_feed}")
-        
+        if "Schwab" in st.session_state.data_feed:
+            st.success(f"📡 {st.session_state.data_feed}")
+        else:
+            st.warning(f"📡 {st.session_state.data_feed}")
+            
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
     # === MODULE 1: MARKET Scanner ===
@@ -422,7 +417,7 @@ if check_login():
 
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
-            st.info("Subscribe to God Mode Beta ($499/mo) to unlock.")
+            st.info("Subscribe to God Mode ($999/mo) to unlock.")
             st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
         else:
             st.markdown("### Select Institutional Universe")
