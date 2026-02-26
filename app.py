@@ -393,14 +393,9 @@ if 'data_feed' not in st.session_state:
 
 # --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
-    USERS = {
-        "admin": {"password": st.secrets["ADMIN_PW"], "tier": "GOD_MODE"},
-        "beta_tester": {"password": st.secrets["BETA_PW"], "tier": "ANALYST"},
-        "guest": {"password": st.secrets["GUEST_PW"], "tier": "ANALYST"},
-        "john": {"password": st.secrets["JOHN_PW"], "tier": "ANALYST"}
-    }
+    USERS = st.secrets["credentials"]
 except Exception as e:
-    # Fallback for testing
+    # Fallback for local testing if secrets are missing
     USERS = {
         "admin": {"password": "admin", "tier": "GOD_MODE"}
     }
