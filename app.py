@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from scipy.stats import norm
 from datetime import datetime
 import time
+import pytz
 
 # ==========================================
 # --- PART 1: V22 INSTITUTIONAL MATH ENGINE ---
@@ -287,6 +288,7 @@ class MarketScanner:
 # ==========================================
 
 st.set_page_config(page_title="VRP Quant | V22 Command", layout="wide", page_icon="🏦")
+est_tz = pytz.timezone('US/Eastern') # Ensure Global EST Timing
 
 # --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
@@ -352,7 +354,7 @@ if check_login():
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
         
-        st.caption(f"⏱️ **Data Snapshot Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST")
+        st.caption(f"⏱️ **Data Snapshot Generated:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
         
         TICKER_SETS = {
             "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
@@ -383,7 +385,7 @@ if check_login():
     elif mode == "🔬 Deep Dive Analysis":
         st.title("🔬 Deep Dive & Trade Architect")
         
-        st.caption(f"⏱️ **Live Computation Timestamp:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST")
+        st.caption(f"⏱️ **Live Computation Timestamp:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
         
         ticker = st.text_input("Asset Ticker", "NVDA").upper()
         
@@ -440,18 +442,34 @@ if check_login():
                         mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
                         
                         # [UPDATED: DYNAMIC X-AXIS TIMESTAMPS FOR PLOTLY CHART]
-                        last_date = df.index[-1]
-                        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq='B') # Business days
+                        hist_dates = df.index.tz_localize(None) # Strips timezone to prevent Plotly errors
+                        future_dates = pd.date_range(start=hist_dates[-1] + pd.Timedelta(days=1), periods=30, freq='B') 
                         
                         fig = go.Figure()
-                        # Pass df.index (dates) into the x parameter for history
-                        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='History', line=dict(color='white')))
-                        # Pass generated future_dates into the x parameter for the projection
+                        fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='white')))
                         fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
                         fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
                         fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
                         fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
                         st.plotly_chart(fig, use_container_width=True)
+
+                        # [ADDED: TIER-BASED REPORT EXPORTS]
+                        st.markdown("---")
+                        st.markdown("### 📥 Export Institutional Data")
+                        
+                        if tier == "GOD_MODE":
+                            # God Mode: Full CSV Data Payload
+                            metrics_dict = {
+                                "Metric": ["Ticker", "Timestamp", "Price", "Alpha Score", "Trend", "Volatility", "Reversal Signal", "VRP Edge", "Sharpe Ratio", "Support", "Resistance", "Win Rate", "Net Return", "Alpha", "Max Drawdown", "Strategy", "Legs", "Premium Target", "POP", "Ideal DTE"],
+                                "Value": [ticker, datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S'), f"${curr_price:.2f}", f"{score}/100", plan['bias'], f"{vol:.1f}%", reversal, f"{vrp_edge:+.2f}%", f"{sharpe:.2f}", f"${sup:.2f}", f"${res:.2f}", f"{win_rate:.1f}%", f"{strat_ret:+.1f}%", f"{outperf:+.1f}%", f"{max_dd:.1f}%", plan['name'], plan['legs'], plan['premium'], f"{plan['pop']}%", plan['dte']]
+                            }
+                            csv_data = pd.DataFrame(metrics_dict).to_csv(index=False).encode('utf-8')
+                            st.download_button(label="📥 Download God Mode Data (CSV)", data=csv_data, file_name=f"{ticker}_HQTA_GodMode.csv", mime="text/csv")
+                        else:
+                            # Analyst Mode: Text Summary Report
+                            report_txt = f"""=== HQTA V22.0 INSTITUTIONAL REPORT ===\nTicker: {ticker}\nTimestamp: {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST\nPrice: ${curr_price:.2f}\nAlpha Score: {score}/100\nTrend: {plan['bias']}\nVolatility: {vol:.1f}%\nReversal Signal: {reversal}\n\n-- EDGE METRICS --\nVRP Edge: {vrp_edge:+.2f}%\nSharpe Ratio: {sharpe:.2f}\nSupport: ${sup:.2f}\nResistance: ${res:.2f}\n\n-- BACKTEST (2-YR) --\nWin Rate: {win_rate:.1f}%\nNet Return: {strat_ret:+.1f}%\nAlpha: {outperf:+.1f}%\nMax Drawdown: {max_dd:.1f}%\n\n-- OPTIMAL ARCHITECTURE --\nStrategy: {plan['name']}\nLegs: {plan['legs']}\nTarget: {plan['premium']}\nPOP: {plan['pop']}%\nDTE: {plan['dte']}\n======================================="""
+                            st.download_button(label="📄 Download Analyst Report (TXT)", data=report_txt, file_name=f"{ticker}_HQTA_Analyst.txt", mime="text/plain")
+
                 except Exception as e:
                     st.error(f"Error analyzing {ticker}: {e}")
         
