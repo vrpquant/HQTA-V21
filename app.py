@@ -6,59 +6,16 @@ import plotly.graph_objects as go
 from scipy.stats import norm
 from datetime import datetime
 import time
-import requests
 
 # ==========================================
-# --- PART 1: THE CORE ENGINE (BACKEND) ---
+# --- PART 1: V22 INSTITUTIONAL MATH ENGINE ---
 # ==========================================
-
-class SchwabDataHandler:
-    """Institutional Market Data Integration for Charles Schwab"""
-    BASE_URL = "https://api.schwabapi.com/marketdata/v1"
-    
-    @staticmethod
-    def is_configured():
-        try:
-            return "SCHWAB_APP_KEY" in st.secrets and "SCHWAB_APP_SECRET" in st.secrets
-        except:
-            return False
-
-    @staticmethod
-    def get_price_history(ticker):
-        # Placeholder for the OAuth2.0 Token handshake
-        return None 
-
-class DataHandler:
-    @staticmethod
-    @st.cache_data(ttl=600, show_spinner=False)
-    def fetch(ticker, retries=3):
-        """Dual-Feed Routing: Tries Schwab API first, falls back to yfinance"""
-        if SchwabDataHandler.is_configured():
-            schwab_df = SchwabDataHandler.get_price_history(ticker)
-            if schwab_df is not None:
-                st.session_state.data_feed = "Charles Schwab API (Live)"
-                return schwab_df
-
-        st.session_state.data_feed = "Quant Data Connection: Secure"
-        for attempt in range(retries):
-            try:
-                # Need 1y of data for MACD/RSI Reversal logic to work properly
-                ticker_obj = yf.Ticker(ticker)
-                df = ticker_obj.history(period="1y")
-                if df is not None and not df.empty and len(df) > 50:
-                    return df
-            except Exception as e:
-                time.sleep(1.5 ** attempt) 
-                
-        return None
 
 class AlphaEngine:
     @staticmethod
     def calculate_score(df):
-        """Multi-Factor Institutional Scoring Model"""
         try:
             calc_df = df.copy().dropna()
-            
             sma50 = calc_df['Close'].rolling(50).mean()
             sma200 = calc_df['Close'].rolling(200).mean()
             trend_spread = (sma50 - sma200) / sma200
@@ -79,76 +36,16 @@ class AlphaEngine:
         except Exception: 
             return 50
 
-class TrendReversalEngine:
-    """V22 Trend Reversal Detection (MACD Divergence + RSI + Volume)"""
-    @staticmethod
-    def calculate_rsi(df, window=14):
-        delta = df['Close'].diff()
-        gain = delta.where(delta > 0, 0).rolling(window=window).mean()
-        loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
-        rs = gain / loss
-        return 100 - (100 / (1 + rs))
-
-    @staticmethod
-    def calculate_macd(df, short_window=12, long_window=26, signal_window=9):
-        short_ema = df['Close'].ewm(span=short_window, adjust=False).mean()
-        long_ema = df['Close'].ewm(span=long_window, adjust=False).mean()
-        macd_line = short_ema - long_ema
-        signal_line = macd_line.ewm(span=signal_window, adjust=False).mean()
-        return pd.DataFrame({'MACD_Line': macd_line, 'Signal_Line': signal_line})
-
-    @staticmethod
-    def calculate_volume_sma(df, window=20):
-        return df['Volume'].rolling(window=window).mean()
-
-    @staticmethod
-    def detect_reversals(df, rsi_window=14, macd_params=(12, 26, 9), volume_window=20, volume_multiplier=1.5):
-        rsi = TrendReversalEngine.calculate_rsi(df, rsi_window)
-        macd_df = TrendReversalEngine.calculate_macd(df, *macd_params)
-        volume_sma = TrendReversalEngine.calculate_volume_sma(df, volume_window)
-        
-        df = df.copy()
-        df['RSI'] = rsi
-        df['RSI_Signal'] = np.where(df['RSI'] < 30, 'Bullish Reversal (Oversold)', 
-                                    np.where(df['RSI'] > 70, 'Bearish Reversal (Overbought)', 'Neutral'))
-        
-        df = pd.concat([df, macd_df], axis=1)
-        df['MACD_Crossover'] = np.where((df['MACD_Line'] > df['Signal_Line']) & (df['MACD_Line'].shift(1) <= df['Signal_Line'].shift(1)), 
-                                        'Bullish Reversal (Crossover)', 
-                                        np.where((df['MACD_Line'] < df['Signal_Line']) & (df['MACD_Line'].shift(1) >= df['Signal_Line'].shift(1)), 
-                                                 'Bearish Reversal (Crossover)', 'Neutral'))
-        
-        df['Price_Trend'] = np.where(df['Close'] > df['Close'].shift(1), 'Up', 'Down')
-        df['MACD_Divergence'] = np.where((df['Price_Trend'] == 'Up') & (df['MACD_Line'] < df['MACD_Line'].shift(1)), 
-                                         'Bearish Divergence', 
-                                         np.where((df['Price_Trend'] == 'Down') & (df['MACD_Line'] > df['MACD_Line'].shift(1)), 
-                                                  'Bullish Divergence', 'No Divergence'))
-        
-        df['Base_Reversal_Signal'] = df['MACD_Divergence'].where(df['MACD_Divergence'] != 'No Divergence', 
-                                                                 df['MACD_Crossover'].where(df['MACD_Crossover'] != 'Neutral', 
-                                                                                            df['RSI_Signal']))
-        
-        df['Volume_SMA'] = volume_sma
-        df['Volume_Spike'] = np.where(df['Volume'] > (df['Volume_SMA'] * volume_multiplier), 'High Volume', 'Normal Volume')
-        
-        df['Confirmed_Reversal_Signal'] = np.where((df['Base_Reversal_Signal'] != 'Neutral') & (df['Volume_Spike'] == 'High Volume'), 
-                                                   '⚠️ CONFIRMED ' + df['Base_Reversal_Signal'].astype(str).str.upper(), 
-                                                   df['Base_Reversal_Signal'])
-        return df
-
 class BacktestEngine:
     @staticmethod
     def run_quick_backtest(df, slippage_bps=5, commission_bps=2):
-        """Institutional Backtest Engine incorporating transaction friction and Max Drawdown."""
         try:
             bt_df = df.copy().dropna()
-            
             bt_df['SMA50'] = bt_df['Close'].rolling(50).mean()
             bt_df['SMA200'] = bt_df['Close'].rolling(200).mean()
             bt_df['Target_Position'] = np.where(bt_df['SMA50'] > bt_df['SMA200'], 1, -1)
             bt_df['Actual_Position'] = bt_df['Target_Position'].shift(1).fillna(0)
             bt_df['Turnover'] = bt_df['Actual_Position'].diff().abs().fillna(0)
-            
             bt_df['Underlying_Return'] = bt_df['Close'].pct_change().fillna(0)
             bt_df['Gross_Strategy_Return'] = bt_df['Actual_Position'] * bt_df['Underlying_Return']
             
@@ -171,8 +68,7 @@ class BacktestEngine:
             max_drawdown = bt_df['Drawdown'].min() * 100 
             
             return win_rate, cumulative_return * 100, outperformance * 100, max_drawdown
-            
-        except Exception as e:
+        except Exception:
             return 0.0, 0.0, 0.0, 0.0
 
 class QuantLogic:
@@ -201,6 +97,37 @@ class QuantLogic:
         return hv20 - hv60
 
     @staticmethod
+    def detect_reversal(df):
+        try:
+            if len(df) < 201: return "Insufficient Data"
+            
+            sma50 = df['Close'].rolling(50).mean()
+            sma200 = df['Close'].rolling(200).mean()
+            
+            if sma50.iloc[-2] < sma200.iloc[-2] and sma50.iloc[-1] >= sma200.iloc[-1]:
+                return "Golden Cross (Bullish)"
+            elif sma50.iloc[-2] > sma200.iloc[-2] and sma50.iloc[-1] <= sma200.iloc[-1]:
+                return "Death Cross (Bearish)"
+                
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / (loss + 1e-9)
+            rsi = 100 - (100 / (1 + rs))
+            
+            curr_rsi = rsi.iloc[-1]
+            prev_rsi = rsi.iloc[-2]
+            
+            if prev_rsi < 30 and curr_rsi >= 30:
+                return "RSI Bullish Bounce"
+            elif prev_rsi > 70 and curr_rsi <= 70:
+                return "RSI Bearish Rejection"
+                
+            return "No Active Reversal"
+        except Exception:
+            return "Error"
+
+    @staticmethod
     def bs_call(S, K, T, r, sigma):
         if T <= 0 or sigma <= 0: return max(0.0, S - K)
         d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
@@ -217,13 +144,10 @@ class QuantLogic:
 class TradeArchitect:
     @staticmethod
     def prob_itm(S, K, T, r, sigma, option_type='call'):
-        """Calculates Risk-Neutral Probability of Expiring In-The-Money using N(d2)"""
         if T <= 0 or sigma <= 0: return 0.0
         d2 = (np.log(S / K) + (r - 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        if option_type == 'call':
-            return norm.cdf(d2)
-        else:
-            return norm.cdf(-d2)
+        if option_type == 'call': return norm.cdf(d2)
+        else: return norm.cdf(-d2)
 
     @staticmethod
     def generate_plan(ticker, price, score, vol, sup, res):
@@ -233,16 +157,12 @@ class TradeArchitect:
         else: bias = "NEUTRAL (Mean-Reverting)"
         
         vol_regime = "HIGH" if vol > 35 else "LOW"
-        sigma = max(0.01, vol / 100) 
-        r = 0.04  # 4% risk-free rate
-        T30 = 30 / 365 
-        T60 = 60 / 365 
+        sigma = max(0.01, vol / 100); r = 0.04; T30 = 30 / 365; T60 = 60 / 365 
         
         if res <= price: res = price * 1.05
         if sup >= price: sup = price * 0.95
         
-        lower_wing = sup * 0.95
-        upper_wing = res * 1.05
+        lower_wing = sup * 0.95; upper_wing = res * 1.05
         
         if "LONG" in bias:
             if vol_regime == "LOW":
@@ -250,42 +170,36 @@ class TradeArchitect:
                 plan['legs'] = f"Buy ATM Call (${price:.0f}) / Sell Res Call (${res:.0f})"
                 debit = QuantLogic.bs_call(price, price, T30, r, sigma) - QuantLogic.bs_call(price, res, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                breakeven = price + debit
-                plan['pop'] = int(TradeArchitect.prob_itm(price, breakeven, T30, r, sigma, 'call') * 100)
+                plan['pop'] = int(TradeArchitect.prob_itm(price, price + debit, T30, r, sigma, 'call') * 100)
             else:
                 plan['name'] = "Short Put Vertical"
                 plan['legs'] = f"Sell Supp Put (${sup:.0f}) / Buy Wing Put (${lower_wing:.0f})"
                 credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
-                prob_short_itm = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
-                plan['pop'] = int((1 - prob_short_itm) * 100)
-                
+                plan['pop'] = int((1 - TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')) * 100)
         elif "SHORT" in bias:
             if vol_regime == "LOW":
                 plan['name'] = "Long Put Vertical"
                 plan['legs'] = f"Buy ATM Put (${price:.0f}) / Sell Supp Put (${sup:.0f})"
                 debit = QuantLogic.bs_put(price, price, T30, r, sigma) - QuantLogic.bs_put(price, sup, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
-                breakeven = price - debit
-                plan['pop'] = int(TradeArchitect.prob_itm(price, breakeven, T30, r, sigma, 'put') * 100)
+                plan['pop'] = int(TradeArchitect.prob_itm(price, price - debit, T30, r, sigma, 'put') * 100)
             else:
                 plan['name'] = "Short Call Vertical"
                 plan['legs'] = f"Sell Res Call (${res:.0f}) / Buy Wing Call (${upper_wing:.0f})"
                 credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
-                prob_short_itm = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
-                plan['pop'] = int((1 - prob_short_itm) * 100)
-                
+                plan['pop'] = int((1 - TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')) * 100)
         else:
             if vol_regime == "HIGH":
-                plan['name'] = "Iron Condor (Delta Neutral)"
-                plan['legs'] = f"Sell Put (${sup:.0f}) & Buy (${lower_wing:.0f}) | Sell Call (${res:.0f}) & Buy (${upper_wing:.0f})"
+                plan['name'] = "Iron Condor"
+                plan['legs'] = f"Sell P({sup:.0f}) / Sell C({res:.0f})"
                 put_credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 call_credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, put_credit + call_credit):.2f}"
-                prob_call_itm = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
-                prob_put_itm = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
-                plan['pop'] = int((1 - (prob_call_itm + prob_put_itm)) * 100)
+                prob_call = TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')
+                prob_put = TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')
+                plan['pop'] = int((1 - (prob_call + prob_put)) * 100)
             else:
                 plan['name'] = "Calendar Spread"
                 plan['legs'] = f"Sell 30D Call (${price:.0f}) / Buy 60D Call (${price:.0f})"
@@ -300,12 +214,10 @@ class TradeArchitect:
 class MonteCarloEngine:
     @staticmethod
     def simulate_paths(df, days=30, sims=1000, jump_intensity=1.5, jump_mean=-0.02, jump_std=0.05):
-        """Institutional Monte Carlo using Merton Jump-Diffusion Process."""
         try:
             last_price = df['Close'].iloc[-1]
-            returns = np.log(df['Close'] / df['Close'].shift(1)).dropna() 
-            mu_hist = returns.mean()
-            sigma_hist = returns.std()
+            returns = np.log(df['Close'] / df['Close'].shift(1)).dropna()
+            mu_hist, sigma_hist = returns.mean(), returns.std()
             dt = 1 / 252 
 
             lambda_dt = jump_intensity * dt 
@@ -325,9 +237,8 @@ class MonteCarloEngine:
             price_paths[1:] = last_price * np.cumprod(daily_factors, axis=0)
             
             return pd.DataFrame(price_paths)
-
         except Exception as e:
-            st.warning(f"Monte Carlo degraded to simple random walk due to calculation error: {e}")
+            st.warning("Degraded to simple random walk.")
             return MonteCarloEngine._simple_random_walk(df, days, sims)
 
     @staticmethod
@@ -346,67 +257,48 @@ class MarketScanner:
     def run_scan(tickers):
         results = []
         for t in tickers:
-            df = DataHandler.fetch(t)
-            if df is not None:
-                price = df['Close'].iloc[-1]
-                score = AlphaEngine.calculate_score(df)
-                vol = QuantLogic.calculate_vol(df)
-                sharpe = QuantLogic.calculate_sharpe(df)
-                vrp = QuantLogic.calculate_vrp_edge(df)
-                sup, res = QuantLogic.get_support_resistance(df)
-                plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
-                mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
-                stop_loss = np.percentile(mc_df.iloc[-1], 5)
+            try:
+                stock = yf.Ticker(t)
+                df = stock.history(period="2y")
+                if not df.empty and len(df) > 50:
+                    price = df['Close'].iloc[-1]
+                    score = AlphaEngine.calculate_score(df)
+                    vol = QuantLogic.calculate_vol(df)
+                    sharpe = QuantLogic.calculate_sharpe(df)
+                    vrp = QuantLogic.calculate_vrp_edge(df)
+                    reversal = QuantLogic.detect_reversal(df) 
+                    sup, res = QuantLogic.get_support_resistance(df)
+                    plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
+                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
+                    stop_loss = np.percentile(mc_df.iloc[-1], 5)
 
-                # --- NEW: Reversal Detection Integration ---
-                reversal_df = TrendReversalEngine.detect_reversals(df)
-                latest_signal = reversal_df['Confirmed_Reversal_Signal'].iloc[-1]
-                display_signal = "TRENDING" if latest_signal == "Neutral" else latest_signal.upper()
-
-                results.append({
-                    "Ticker": t,
-                    "Price": price,
-                    "Alpha Score": score,
-                    "V22 Reversal Alert": display_signal,
-                    "Trend (L/S)": plan['bias'],
-                    "VRP Edge %": vrp,
-                    "Sharpe": sharpe,
-                    "Vol %": vol,
-                    "Support": sup,
-                    "Resistance": res,
-                    "Stop Loss (VaR 95)": stop_loss,
-                    "Optimal Strategy": plan['name'],
-                    "Legs (Strikes)": plan['legs'],
-                    "POP %": plan['pop']
-                })
+                    results.append({
+                        "Ticker": t, "Price": price, "Alpha Score": score, "Trend (L/S)": plan['bias'],
+                        "Reversal Signal": reversal, 
+                        "VRP Edge %": vrp, "Sharpe": sharpe, "Vol %": vol, "Support": sup,
+                        "Resistance": res, "Stop Loss (VaR 95)": stop_loss, "Optimal Strategy": plan['name'],
+                        "Legs (Strikes)": plan['legs'], "POP %": plan['pop']
+                    })
+            except Exception: pass
         return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
-
 
 # ==========================================
 # --- PART 2: THE STREAMLIT APP (UI) ---
 # ==========================================
 
-st.set_page_config(page_title="HQTA | V22 Command", layout="wide", page_icon="🏦")
-
-if 'data_feed' not in st.session_state:
-    st.session_state.data_feed = "Establishing Secure Connection..."
+st.set_page_config(page_title="VRP Quant | V22 Command", layout="wide", page_icon="🏦")
 
 # --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
     USERS = st.secrets["credentials"]
 except Exception as e:
-    # Fallback for local testing if secrets are missing
-    USERS = {
-        "admin": {"password": "admin", "tier": "GOD_MODE"}
-    }
-    st.warning("⚠️ Security vault not connected. Running in fallback mode.")
+    st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please configure [credentials] in Streamlit Secrets.")
+    st.stop()
 
-DISCLAIMER_TEXT = """
-**SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
-1. **Hypothetical Performance:** The Alpha Scores, VRP Edge, Black-Scholes Pricing, Backtested Results, and Monte Carlo projections generated by this software are hypothetical in nature, do not reflect actual investment results, and are not guarantees of future results.
-2. **Not Financial Advice:** VRP Quant / HQTA provides quantitative data analysis for institutional and informational purposes only. It is not an offer or solicitation to buy or sell any security.
-3. **Risk Disclosure:** Options trading involves substantial risk of loss and is not suitable for all investors. You are solely responsible for verifying strike limits and managing portfolio risk.
-"""
+DISCLAIMER_TEXT = """**SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
+1. **Hypothetical Performance:** Metrics generated by this software are hypothetical and not guarantees of future results.
+2. **Not Financial Advice:** VRP Quant provides quantitative data analysis for informational purposes only.
+3. **Risk Disclosure:** Options trading involves substantial risk of loss."""
 
 def check_login():
     if "authenticated" not in st.session_state:
@@ -414,8 +306,7 @@ def check_login():
         st.session_state.tier = None
         
     if not st.session_state.authenticated:
-        st.markdown("## 🔒 HQTA Terminal Login")
-        
+        st.markdown("## 🔒 VRP Quant Terminal Login")
         c1, c2 = st.columns([1, 2])
         with c1:
             user = st.text_input("Username", key="login_u")
@@ -430,73 +321,49 @@ def check_login():
         
         st.markdown("---")
         st.markdown("### 👑 Founding Member Cohort (Beta)")
-        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta cohort today to lock in your lifetime discounted rate.")
+        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta today to lock in your lifetime discounted rate.")
         
         b1, b2 = st.columns(2)
-        
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
-            st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($149/mo)", "YOUR_PAYPAL_LINK_HERE", use_container_width=True)
             
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
-            st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($499/mo)", "YOUR_PAYPAL_LINK_HERE", use_container_width=True)
             
         st.markdown("---")
-        st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
+        st.success("🛡️ SEC Compliance Check: System verified.")
         st.caption(DISCLAIMER_TEXT)
-        
         return False
     return True
 
 if check_login():
     tier = st.session_state.tier
     
-    # --- NEW: Global Timestamp Integration ---
-    run_date_display = datetime.now().strftime("%B %d, %Y | %H:%M EST")
-    
     with st.sidebar:
-        st.markdown("# 🏦 HQTA V22.0")
-        if tier == "GOD_MODE": 
-            st.success("🔓 GOD MODE ACTIVE")
-        else: 
-            st.warning("🔒 ANALYST TIER")
-        
+        st.markdown("# 🏦 VRP Quant V22.0")
+        if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
+        else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
-        # --- NEW: Display Live Date/Time in Sidebar ---
-        st.caption(f"🕒 System Time: {run_date_display}")
-        st.caption("SYSTEM STATUS")
-        st.success(f"🟢 {st.session_state.data_feed}")
         
     mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
-    # === MODULE 1: MARKET Scanner ===
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
         
-        # --- NEW: Timestamp header ---
-        st.caption(f"REPORT GENERATED: {run_date_display} | SEC RULE 206(4)-1 COMPLIANT")
-        st.success("🛡️ SEC Compliance Check: System verified. Reg D Rule 506(c) display parameters met.")
-        st.caption(DISCLAIMER_TEXT)
-        st.markdown("---")
+        st.caption(f"⏱️ **Data Snapshot Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST")
         
         TICKER_SETS = {
             "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
-            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH", "SOXL"],
-            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CCJ", "URA", "CVX", "XOM", "UNG"],
-            "📉 Volatility & Hedges": ["VIXY", "UVXY", "TLT", "SH", "SQQQ", "SPXU"],
-            "🏦 Financials": ["JPM", "GS", "BAC", "MS", "C", "XLF", "KRE"]
+            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
+            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"]
         }
 
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
-            st.info("Subscribe to God Mode Beta ($499/mo) to unlock.")
-            st.code("ERROR 403: PREMIUM_FEATURE_LOCKED", language="text")
         else:
-            st.markdown("### Select Institutional Universe")
-            
             col1, col2 = st.columns([1, 2])
-            
             with col1:
                 options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
                 sector_choice = st.selectbox("Select Sector:", options)
@@ -504,178 +371,89 @@ if check_login():
             selected_tickers = []
             if sector_choice == "✨ Custom Watchlist":
                 with col2:
-                    st.info("Paste your own list of tickers to scan.")
-                    custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI, DKNG")
-                    if custom_input: 
-                        selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
-            else: 
-                selected_tickers = TICKER_SETS[sector_choice]
+                    custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
+                    if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
+            else: selected_tickers = TICKER_SETS[sector_choice]
             
             if st.button("🔄 Run Live Scan") and selected_tickers:
-                with st.spinner(f"Scanning & Resolving Dependencies..."):
+                with st.spinner("Scanning..."):
                     df_scan = MarketScanner.run_scan(selected_tickers)
-                    if not df_scan.empty:
-                        
-                        # --- NEW: Highlight Reversal Alerts visually ---
-                        def highlight_reversals(val):
-                            if 'BULLISH' in str(val): return 'color: #00ff00; font-weight: bold'
-                            elif 'BEARISH' in str(val): return 'color: #ff0000; font-weight: bold'
-                            return 'color: #718096'
-                        
-                        st.dataframe(
-                            df_scan.style.background_gradient(subset=['Alpha Score'], cmap='RdYlGn', vmin=0, vmax=100)
-                            .map(highlight_reversals, subset=['V22 Reversal Alert']), 
-                            column_config={
-                                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                                "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
-                                "Alpha Score": st.column_config.ProgressColumn("Alpha Score", format="%d", min_value=0, max_value=100),
-                                "V22 Reversal Alert": st.column_config.TextColumn("Reversal Alert"),
-                                "Trend (L/S)": st.column_config.TextColumn("Trend (L/S)"),
-                                "VRP Edge %": st.column_config.NumberColumn("VRP Edge %", format="%+.2f%%"),
-                                "Sharpe": st.column_config.NumberColumn("Sharpe", format="%.2f"),
-                                "Vol %": st.column_config.NumberColumn("Vol %", format="%.1f%%"),
-                                "Support": st.column_config.NumberColumn("Support", format="$%.2f"),
-                                "Resistance": st.column_config.NumberColumn("Resistance", format="$%.2f"),
-                                "Stop Loss (VaR 95)": st.column_config.NumberColumn("Stop Loss", format="$%.2f"),
-                                "Optimal Strategy": st.column_config.TextColumn("Strategy"),
-                                "Legs (Strikes)": st.column_config.TextColumn("Legs"),
-                                "POP %": st.column_config.NumberColumn("POP %", format="%d%%")
-                            }, use_container_width=True)
-                        
-                        csv = df_scan.to_csv(index=False).encode('utf-8')
-                        st.download_button("💾 Download Results (CSV)", csv, "HQTA_Institutional_Scan_V22.csv", "text/csv")
-                    else:
-                        st.warning("Data fetch failed due to API constraints. Please try again in 30 seconds.")
+                    if not df_scan.empty: st.dataframe(df_scan, use_container_width=True)
 
-    # === MODULE 2: DEEP DIVE ===
     elif mode == "🔬 Deep Dive Analysis":
         st.title("🔬 Deep Dive & Trade Architect")
         
-        # --- NEW: Timestamp header ---
-        st.caption(f"REPORT GENERATED: {run_date_display} | SEC RULE 206(4)-1 COMPLIANT")
+        st.caption(f"⏱️ **Live Computation Timestamp:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} EST")
         
         ticker = st.text_input("Asset Ticker", "NVDA").upper()
         
         if st.button("Run Analysis"):
             with st.spinner("Connecting to Data Feeds & Running Vector Backtest..."):
-                df = DataHandler.fetch(ticker)
-                
-                if df is not None:
-                    # --- NEW: Reversal Detection output on the HUD ---
-                    reversal_df = TrendReversalEngine.detect_reversals(df)
-                    latest_signal = reversal_df['Confirmed_Reversal_Signal'].iloc[-1]
-                    display_signal = "TRENDING (NO REVERSAL)" if latest_signal == "Neutral" else latest_signal.upper()
-                    
-                    if "CONFIRMED" in display_signal:
-                        if "BULLISH" in display_signal:
-                            st.success(f"📈 **V22 SYSTEM ALERT:** {display_signal}")
-                        else:
-                            st.error(f"📉 **V22 SYSTEM ALERT:** {display_signal}")
-                    else:
-                        st.info(f"📊 **V22 TREND STATUS:** {display_signal}")
-
-                    curr_price = df['Close'].iloc[-1]
-                    score = AlphaEngine.calculate_score(df)
-                    vol = QuantLogic.calculate_vol(df)
-                    sup, res = QuantLogic.get_support_resistance(df)
-                    sharpe = QuantLogic.calculate_sharpe(df)
-                    vrp_edge = QuantLogic.calculate_vrp_edge(df)
-                    
-                    win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
-                    plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
-                    
-                    st.markdown("### 📊 Market Variables")
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("Price", f"${curr_price:.2f}")
-                    m2.metric("Alpha Score", f"{score}/100")
-                    m3.metric("Trend", plan['bias'])
-                    m4.metric("Volatility", f"{vol:.1f}%")
-                    
-                    m5, m6, m7, m8 = st.columns(4)
-                    m5.metric("VRP Edge", f"{vrp_edge:+.2f}%", help="Volatility Risk Premium Spread")
-                    m6.metric("Sharpe Ratio", f"{sharpe:.2f}")
-                    m7.metric("Support (Floor)", f"${sup:.2f}")
-                    m8.metric("Resistance (Ceiling)", f"${res:.2f}")
-                    
-                    st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
-                    b1, b2, b3, b4 = st.columns(4)
-                    b1.metric("Historical Win Rate", f"{win_rate:.1f}%", help="Percentage of profitable daily holds under current trend logic")
-                    b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
-                    b3.metric("Alpha Generated", f"{outperf:+.1f}%", delta_color="normal")
-                    b4.metric("Max Drawdown", f"{max_dd:.1f}%", delta_color="inverse", help="Largest peak-to-trough drop")
-                    
-                    st.markdown("### 🎯 Optimal Trade Architecture")
-                    st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
-                    
-                    s1, s2, s3 = st.columns(3)
-                    s1.metric("Est. Execution Target", plan['premium'], help="Priced via Black-Scholes Model")
-                    s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
-                    s3.metric("Ideal DTE", plan['dte'])
-                    
-                    sims = 10000 if tier == "GOD_MODE" else 1000
-                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
-                    var_95 = np.percentile(mc_df.iloc[-1], 5)
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(y=df['Close'], name='History', line=dict(color='white')))
-                    fig.add_trace(go.Scatter(x=list(range(len(df), len(df)+30)), y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
-                    fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
-                    fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                    
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)")
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    r1, r2 = st.columns(2)
-                    r1.metric("95% Value at Risk (Stop)", f"${var_95:.2f}", delta_color="inverse")
-                    
-                    if tier == "GOD_MODE":
-                        var_99 = np.percentile(mc_df.iloc[-1], 1)
-                        r2.metric("99% Black Swan Level", f"${var_99:.2f}", delta_color="inverse", help="1% Tail Risk")
-                        status = "GOD MODE - DEEP COMPUTE VERIFIED"
-                    else:
-                        r2.metric("99% Black Swan", "🔒 LOCKED", help="Upgrade to God Mode")
-                        status = "ANALYST TIER - STANDARD"
-
-                    # --- NEW: Inject Timestamp & Reversal Alert into Report ---
-                    report_txt = f"""HQTA V22.0 INSTITUTIONAL REPORT
---------------------------------
-DATE: {run_date_display}
-TICKER: {ticker}
-STATUS: {status}
-
-MARKET VARIABLES:
-Price: ${curr_price:.2f}
-Alpha Score: {score}/100
-Trend/Bias: {plan['bias']}
-Reversal Alert: {display_signal}
-VRP Edge: {vrp_edge:+.2f}%
-Sharpe Ratio: {sharpe:.2f}
-
-BACKTEST VALIDATION (2-YEAR):
-Historical Win Rate: {win_rate:.1f}%
-Net Strategy Return: {strat_ret:+.1f}%
-Alpha Generated vs Buy & Hold: {outperf:+.1f}%
-Max Drawdown: {max_dd:.1f}%
-
-TECHNICAL LEVELS:
-Support (Floor): ${sup:.2f}
-Resistance (Ceiling): ${res:.2f}
-Historical Volatility: {vol:.1f}%
-
-STRATEGY ARCHITECT:
-Recommended Strategy: {plan['name']}
-Execution Legs: {plan['legs']}
-Black-Scholes Pricing: {plan['premium']}
-Probability of Profit (POP): {plan['pop']}%
-Optimal Horizon (DTE): {plan['dte']}
-
-RISK ANALYSIS:
-95% Value at Risk Limit: ${var_95:.2f}
-"""
-                    st.download_button("💾 Download Trade Plan (TXT)", report_txt, f"{ticker}_VRP_Trade_Plan.txt")
-                    
-                else: 
-                    st.error("⚠️ DATA FETCH ERROR: Connection to market data feeds timed out. Please wait 30 seconds and try again.")
+                try:
+                    stock = yf.Ticker(ticker)
+                    df = stock.history(period="2y")
+                    if not df.empty:
+                        curr_price = df['Close'].iloc[-1]
+                        score = AlphaEngine.calculate_score(df)
+                        vol = QuantLogic.calculate_vol(df)
+                        sup, res = QuantLogic.get_support_resistance(df)
+                        sharpe = QuantLogic.calculate_sharpe(df)
+                        vrp_edge = QuantLogic.calculate_vrp_edge(df)
+                        reversal = QuantLogic.detect_reversal(df) 
+                        
+                        win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
+                        plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
+                        
+                        if reversal != "No Active Reversal":
+                            st.warning(f"🚨 **STRUCTURAL REVERSAL DETECTED:** {reversal}")
+                            
+                        st.markdown("### 📊 Market Variables")
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("Price", f"${curr_price:.2f}")
+                        m2.metric("Alpha Score", f"{score}/100")
+                        m3.metric("Trend", plan['bias'])
+                        m4.metric("Volatility", f"{vol:.1f}%")
+                        m5.metric("Trend Reversal", reversal) 
+                        
+                        m6, m7, m8, m9 = st.columns(4)
+                        m6.metric("VRP Edge", f"{vrp_edge:+.2f}%")
+                        m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                        m8.metric("Support (Floor)", f"${sup:.2f}")
+                        m9.metric("Resistance (Ceiling)", f"${res:.2f}")
+                        
+                        st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
+                        b1, b2, b3, b4 = st.columns(4)
+                        b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
+                        b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
+                        b3.metric("Alpha Generated", f"{outperf:+.1f}%")
+                        b4.metric("Max Drawdown", f"{max_dd:.1f}%", delta_color="inverse")
+                        
+                        st.markdown("### 🎯 Optimal Trade Architecture")
+                        st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
+                        
+                        s1, s2, s3 = st.columns(3)
+                        s1.metric("Est. Execution Target", plan['premium'])
+                        s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
+                        s3.metric("Ideal DTE", plan['dte'])
+                        
+                        sims = 10000 if tier == "GOD_MODE" else 1000
+                        mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
+                        
+                        # [UPDATED: DYNAMIC X-AXIS TIMESTAMPS FOR PLOTLY CHART]
+                        last_date = df.index[-1]
+                        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=30, freq='B') # Business days
+                        
+                        fig = go.Figure()
+                        # Pass df.index (dates) into the x parameter for history
+                        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='History', line=dict(color='white')))
+                        # Pass generated future_dates into the x parameter for the projection
+                        fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
+                        fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
+                        fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
+                        fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
+                        st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error analyzing {ticker}: {e}")
         
     with st.sidebar:
         st.markdown("---")
