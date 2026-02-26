@@ -270,6 +270,8 @@ class MarketScanner:
                     reversal = QuantLogic.detect_reversal(df) 
                     sup, res = QuantLogic.get_support_resistance(df)
                     plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
+                    
+                    win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
                     mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
                     stop_loss = np.percentile(mc_df.iloc[-1], 5)
 
@@ -277,8 +279,8 @@ class MarketScanner:
                         "Ticker": t, "Price": price, "Alpha Score": score, "Trend (L/S)": plan['bias'],
                         "Reversal Signal": reversal, 
                         "VRP Edge %": vrp, "Sharpe": sharpe, "Vol %": vol, "Support": sup,
-                        "Resistance": res, "Stop Loss (VaR 95)": stop_loss, "Optimal Strategy": plan['name'],
-                        "Legs (Strikes)": plan['legs'], "POP %": plan['pop']
+                        "Resistance": res, "95% VaR (Variance)": stop_loss, "Markdown % (Max DD)": max_dd, 
+                        "Optimal Strategy": plan['name'], "Legs (Strikes)": plan['legs'], "POP %": plan['pop']
                     })
             except Exception: pass
         return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
@@ -288,7 +290,7 @@ class MarketScanner:
 # ==========================================
 
 st.set_page_config(page_title="VRP Quant | V22 Command", layout="wide", page_icon="🏦")
-est_tz = pytz.timezone('US/Eastern') # Ensure Global EST Timing
+est_tz = pytz.timezone('US/Eastern')
 
 # --- SECURE PRODUCTION USERS DICTIONARY ---
 try:
@@ -406,6 +408,10 @@ if check_login():
                         win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
                         plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
                         
+                        sims = 10000 if tier == "GOD_MODE" else 1000
+                        mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
+                        stop_loss_var95 = np.percentile(mc_df.iloc[-1], 5)
+                        
                         if reversal != "No Active Reversal":
                             st.warning(f"🚨 **STRUCTURAL REVERSAL DETECTED:** {reversal}")
                             
@@ -417,18 +423,29 @@ if check_login():
                         m4.metric("Volatility", f"{vol:.1f}%")
                         m5.metric("Trend Reversal", reversal) 
                         
-                        m6, m7, m8, m9 = st.columns(4)
+                        m6, m7, m8, m9, m10 = st.columns(5)
                         m6.metric("VRP Edge", f"{vrp_edge:+.2f}%")
                         m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
                         m8.metric("Support (Floor)", f"${sup:.2f}")
                         m9.metric("Resistance (Ceiling)", f"${res:.2f}")
+                        
+                        # TIER LOCK LOGIC FOR VaR
+                        if tier == "GOD_MODE":
+                            m10.metric("95% VaR (Variance)", f"${stop_loss_var95:.2f}")
+                        else:
+                            m10.metric("95% VaR (Variance)", "🔒 God Mode")
                         
                         st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
                         b1, b2, b3, b4 = st.columns(4)
                         b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
                         b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
                         b3.metric("Alpha Generated", f"{outperf:+.1f}%")
-                        b4.metric("Max Drawdown", f"{max_dd:.1f}%", delta_color="inverse")
+                        
+                        # TIER LOCK LOGIC FOR MARKDOWN
+                        if tier == "GOD_MODE":
+                            b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
+                        else:
+                            b4.metric("Markdown % (Max DD)", "🔒 God Mode")
                         
                         st.markdown("### 🎯 Optimal Trade Architecture")
                         st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
@@ -438,11 +455,7 @@ if check_login():
                         s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
                         s3.metric("Ideal DTE", plan['dte'])
                         
-                        sims = 10000 if tier == "GOD_MODE" else 1000
-                        mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=sims)
-                        
-                        # [UPDATED: DYNAMIC X-AXIS TIMESTAMPS FOR PLOTLY CHART]
-                        hist_dates = df.index.tz_localize(None) # Strips timezone to prevent Plotly errors
+                        hist_dates = df.index.tz_localize(None)
                         future_dates = pd.date_range(start=hist_dates[-1] + pd.Timedelta(days=1), periods=30, freq='B') 
                         
                         fig = go.Figure()
@@ -453,21 +466,18 @@ if check_login():
                         fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
                         st.plotly_chart(fig, use_container_width=True)
 
-                        # [ADDED: TIER-BASED REPORT EXPORTS]
                         st.markdown("---")
                         st.markdown("### 📥 Export Institutional Data")
                         
                         if tier == "GOD_MODE":
-                            # God Mode: Full CSV Data Payload
                             metrics_dict = {
-                                "Metric": ["Ticker", "Timestamp", "Price", "Alpha Score", "Trend", "Volatility", "Reversal Signal", "VRP Edge", "Sharpe Ratio", "Support", "Resistance", "Win Rate", "Net Return", "Alpha", "Max Drawdown", "Strategy", "Legs", "Premium Target", "POP", "Ideal DTE"],
-                                "Value": [ticker, datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S'), f"${curr_price:.2f}", f"{score}/100", plan['bias'], f"{vol:.1f}%", reversal, f"{vrp_edge:+.2f}%", f"{sharpe:.2f}", f"${sup:.2f}", f"${res:.2f}", f"{win_rate:.1f}%", f"{strat_ret:+.1f}%", f"{outperf:+.1f}%", f"{max_dd:.1f}%", plan['name'], plan['legs'], plan['premium'], f"{plan['pop']}%", plan['dte']]
+                                "Metric": ["Ticker", "Timestamp", "Price", "Alpha Score", "Trend", "Volatility", "Reversal Signal", "VRP Edge", "Sharpe Ratio", "Support", "Resistance", "95% VaR (Variance)", "Win Rate", "Net Return", "Alpha", "Markdown % (Max DD)", "Strategy", "Legs", "Premium Target", "POP", "Ideal DTE"],
+                                "Value": [ticker, datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S'), f"${curr_price:.2f}", f"{score}/100", plan['bias'], f"{vol:.1f}%", reversal, f"{vrp_edge:+.2f}%", f"{sharpe:.2f}", f"${sup:.2f}", f"${res:.2f}", f"${stop_loss_var95:.2f}", f"{win_rate:.1f}%", f"{strat_ret:+.1f}%", f"{outperf:+.1f}%", f"{max_dd:.1f}%", plan['name'], plan['legs'], plan['premium'], f"{plan['pop']}%", plan['dte']]
                             }
                             csv_data = pd.DataFrame(metrics_dict).to_csv(index=False).encode('utf-8')
                             st.download_button(label="📥 Download God Mode Data (CSV)", data=csv_data, file_name=f"{ticker}_HQTA_GodMode.csv", mime="text/csv")
                         else:
-                            # Analyst Mode: Text Summary Report
-                            report_txt = f"""=== HQTA V22.0 INSTITUTIONAL REPORT ===\nTicker: {ticker}\nTimestamp: {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST\nPrice: ${curr_price:.2f}\nAlpha Score: {score}/100\nTrend: {plan['bias']}\nVolatility: {vol:.1f}%\nReversal Signal: {reversal}\n\n-- EDGE METRICS --\nVRP Edge: {vrp_edge:+.2f}%\nSharpe Ratio: {sharpe:.2f}\nSupport: ${sup:.2f}\nResistance: ${res:.2f}\n\n-- BACKTEST (2-YR) --\nWin Rate: {win_rate:.1f}%\nNet Return: {strat_ret:+.1f}%\nAlpha: {outperf:+.1f}%\nMax Drawdown: {max_dd:.1f}%\n\n-- OPTIMAL ARCHITECTURE --\nStrategy: {plan['name']}\nLegs: {plan['legs']}\nTarget: {plan['premium']}\nPOP: {plan['pop']}%\nDTE: {plan['dte']}\n======================================="""
+                            report_txt = f"""=== HQTA V22.0 INSTITUTIONAL REPORT ===\nTicker: {ticker}\nTimestamp: {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST\nPrice: ${curr_price:.2f}\nAlpha Score: {score}/100\nTrend: {plan['bias']}\nVolatility: {vol:.1f}%\nReversal Signal: {reversal}\n\n-- EDGE METRICS --\nVRP Edge: {vrp_edge:+.2f}%\nSharpe Ratio: {sharpe:.2f}\nSupport: ${sup:.2f}\nResistance: ${res:.2f}\n\n-- BACKTEST (2-YR) --\nWin Rate: {win_rate:.1f}%\nNet Return: {strat_ret:+.1f}%\nAlpha: {outperf:+.1f}%\n\n-- OPTIMAL ARCHITECTURE --\nStrategy: {plan['name']}\nLegs: {plan['legs']}\nTarget: {plan['premium']}\nPOP: {plan['pop']}%\nDTE: {plan['dte']}\n======================================="""
                             st.download_button(label="📄 Download Analyst Report (TXT)", data=report_txt, file_name=f"{ticker}_HQTA_Analyst.txt", mime="text/plain")
 
                 except Exception as e:
