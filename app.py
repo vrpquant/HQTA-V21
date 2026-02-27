@@ -53,9 +53,20 @@ class BacktestEngine:
             total_friction_pct = (slippage_bps + commission_bps) / 10000 
             bt_df['Net_Strategy_Return'] = bt_df['Gross_Strategy_Return'] - (bt_df['Turnover'] * total_friction_pct)
             
-            winning_days = (bt_df['Net_Strategy_Return'] > 0).sum()
+            winning_returns = bt_df[bt_df['Net_Strategy_Return'] > 0]['Net_Strategy_Return']
+            losing_returns = bt_df[bt_df['Net_Strategy_Return'] < 0]['Net_Strategy_Return']
+            
+            winning_days = len(winning_returns)
             total_trades_days = (bt_df['Actual_Position'] != 0).sum()
             win_rate = (winning_days / total_trades_days) * 100 if total_trades_days > 0 else 0
+            
+            # [ADDED] Kelly Criterion Math
+            avg_win = winning_returns.mean() if not winning_returns.empty else 0
+            avg_loss = abs(losing_returns.mean()) if not losing_returns.empty else 1e-9
+            win_prob = win_rate / 100
+            win_loss_ratio = avg_win / avg_loss if avg_loss > 0 else 0
+            kelly = (win_prob - ((1 - win_prob) / win_loss_ratio)) * 100 if win_loss_ratio > 0 else 0
+            half_kelly = max(0.0, min(100.0, kelly / 2)) # Institutional standard is to scale Kelly down
             
             bt_df['Cumulative_Net'] = (1 + bt_df['Net_Strategy_Return']).cumprod() - 1
             bt_df['Cumulative_Hold'] = (1 + bt_df['Underlying_Return']).cumprod() - 1
@@ -68,9 +79,9 @@ class BacktestEngine:
             bt_df['Drawdown'] = ((1 + bt_df['Net_Strategy_Return']).cumprod() - bt_df['Peak']) / bt_df['Peak']
             max_drawdown = bt_df['Drawdown'].min() * 100 
             
-            return win_rate, cumulative_return * 100, outperformance * 100, max_drawdown
+            return win_rate, cumulative_return * 100, outperformance * 100, max_drawdown, half_kelly
         except Exception:
-            return 0.0, 0.0, 0.0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0
 
 class QuantLogic:
     @staticmethod
@@ -165,36 +176,37 @@ class TradeArchitect:
         
         lower_wing = sup * 0.95; upper_wing = res * 1.05
         
+        # [ADDED] Specific Explicit Legs (+ = Long, - = Short)
         if "LONG" in bias:
             if vol_regime == "LOW":
                 plan['name'] = "Long Call Vertical"
-                plan['legs'] = f"Buy ATM Call (${price:.0f}) / Sell Res Call (${res:.0f})"
+                plan['legs'] = f"+C({price:.0f}) / -C({res:.0f})"
                 debit = QuantLogic.bs_call(price, price, T30, r, sigma) - QuantLogic.bs_call(price, res, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
                 plan['pop'] = int(TradeArchitect.prob_itm(price, price + debit, T30, r, sigma, 'call') * 100)
             else:
                 plan['name'] = "Short Put Vertical"
-                plan['legs'] = f"Sell Supp Put (${sup:.0f}) / Buy Wing Put (${lower_wing:.0f})"
+                plan['legs'] = f"-P({sup:.0f}) / +P({lower_wing:.0f})"
                 credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
                 plan['pop'] = int((1 - TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')) * 100)
         elif "SHORT" in bias:
             if vol_regime == "LOW":
                 plan['name'] = "Long Put Vertical"
-                plan['legs'] = f"Buy ATM Put (${price:.0f}) / Sell Supp Put (${sup:.0f})"
+                plan['legs'] = f"+P({price:.0f}) / -P({sup:.0f})"
                 debit = QuantLogic.bs_put(price, price, T30, r, sigma) - QuantLogic.bs_put(price, sup, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
                 plan['pop'] = int(TradeArchitect.prob_itm(price, price - debit, T30, r, sigma, 'put') * 100)
             else:
                 plan['name'] = "Short Call Vertical"
-                plan['legs'] = f"Sell Res Call (${res:.0f}) / Buy Wing Call (${upper_wing:.0f})"
+                plan['legs'] = f"-C({res:.0f}) / +C({upper_wing:.0f})"
                 credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, credit):.2f}"
                 plan['pop'] = int((1 - TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')) * 100)
         else:
             if vol_regime == "HIGH":
                 plan['name'] = "Iron Condor"
-                plan['legs'] = f"Sell P({sup:.0f}) / Sell C({res:.0f})"
+                plan['legs'] = f"+P({lower_wing:.0f}) / -P({sup:.0f}) | -C({res:.0f}) / +C({upper_wing:.0f})"
                 put_credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
                 call_credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
                 plan['premium'] = f"Credit: ${max(0.01, put_credit + call_credit):.2f}"
@@ -203,7 +215,7 @@ class TradeArchitect:
                 plan['pop'] = int((1 - (prob_call + prob_put)) * 100)
             else:
                 plan['name'] = "Calendar Spread"
-                plan['legs'] = f"Sell 30D Call (${price:.0f}) / Buy 60D Call (${price:.0f})"
+                plan['legs'] = f"-C({price:.0f}) [30D] / +C({price:.0f}) [60D]"
                 debit = QuantLogic.bs_call(price, price, T60, r, sigma) - QuantLogic.bs_call(price, price, T30, r, sigma)
                 plan['premium'] = f"Debit: ${max(0.01, debit):.2f}"
                 plan['pop'] = 50 
@@ -271,7 +283,7 @@ class MarketScanner:
                     sup, res = QuantLogic.get_support_resistance(df)
                     plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res)
                     
-                    win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
+                    win_rate, strat_ret, outperf, max_dd, kelly = BacktestEngine.run_quick_backtest(df)
                     mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=1000)
                     stop_loss = np.percentile(mc_df.iloc[-1], 5)
 
@@ -279,8 +291,9 @@ class MarketScanner:
                         "Ticker": t, "Price": price, "Alpha Score": score, "Trend (L/S)": plan['bias'],
                         "Reversal Signal": reversal, 
                         "VRP Edge %": vrp, "Sharpe": sharpe, "Vol %": vol, "Support": sup,
-                        "Resistance": res, "95% VaR (Variance)": stop_loss, "Markdown % (Max DD)": max_dd, 
-                        "Optimal Strategy": plan['name'], "Legs (Strikes)": plan['legs'], "POP %": plan['pop']
+                        "Resistance": res, "95% VaR (Variance)": stop_loss, "Markdown % (Max DD)": max_dd,
+                        "Kelly % (Half)": kelly, "Optimal Strategy": plan['name'], 
+                        "Legs (Strikes)": plan['legs'], "POP %": plan['pop']
                     })
             except Exception: pass
         return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
@@ -358,10 +371,19 @@ if check_login():
         
         st.caption(f"⏱️ **Data Snapshot Generated:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
         
+        # [ADDED] 11 Full Market Sectors
         TICKER_SETS = {
             "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
             "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
-            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"]
+            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"],
+            "🏥 Healthcare & Biotech": ["XLV", "JNJ", "UNH", "LLY", "ABBV", "PFE", "MRK"],
+            "🏦 Financials & Banking": ["XLF", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA"],
+            "🏭 Industrials & Defense": ["XLI", "BA", "LMT", "RTX", "CAT", "GE", "HON"],
+            "🛒 Consumer Discretionary": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"],
+            "🧼 Consumer Staples": ["XLP", "PG", "KO", "PEP", "WMT", "COST"],
+            "🏠 Real Estate (REITs)": ["XLRE", "AMT", "PLD", "CCI", "EQIX", "PSA"],
+            "🔌 Utilities": ["XLU", "NEE", "DUK", "SO", "SRE", "AEP"],
+            "📡 Telecommunications": ["XLC", "VZ", "T", "CMCSA", "CHTR", "TMUS"]
         }
 
         if tier != "GOD_MODE":
@@ -405,7 +427,7 @@ if check_login():
                         vrp_edge = QuantLogic.calculate_vrp_edge(df)
                         reversal = QuantLogic.detect_reversal(df) 
                         
-                        win_rate, strat_ret, outperf, max_dd = BacktestEngine.run_quick_backtest(df)
+                        win_rate, strat_ret, outperf, max_dd, kelly = BacktestEngine.run_quick_backtest(df)
                         plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res)
                         
                         sims = 10000 if tier == "GOD_MODE" else 1000
@@ -429,23 +451,24 @@ if check_login():
                         m8.metric("Support (Floor)", f"${sup:.2f}")
                         m9.metric("Resistance (Ceiling)", f"${res:.2f}")
                         
-                        # TIER LOCK LOGIC FOR VaR
                         if tier == "GOD_MODE":
                             m10.metric("95% VaR (Variance)", f"${stop_loss_var95:.2f}")
                         else:
                             m10.metric("95% VaR (Variance)", "🔒 God Mode")
                         
                         st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
-                        b1, b2, b3, b4 = st.columns(4)
+                        # [ADDED] 5th Column for Kelly Criterion
+                        b1, b2, b3, b4, b5 = st.columns(5)
                         b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
                         b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
                         b3.metric("Alpha Generated", f"{outperf:+.1f}%")
                         
-                        # TIER LOCK LOGIC FOR MARKDOWN
                         if tier == "GOD_MODE":
                             b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
+                            b5.metric("Kelly Fraction (Half)", f"{kelly:.1f}%", delta_color="normal")
                         else:
                             b4.metric("Markdown % (Max DD)", "🔒 God Mode")
+                            b5.metric("Kelly Fraction", "🔒 God Mode")
                         
                         st.markdown("### 🎯 Optimal Trade Architecture")
                         st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
@@ -463,7 +486,8 @@ if check_login():
                         fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
                         fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
                         fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                        fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
+                        # [UPDATED] Institutional Chart Title
+                        fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Merton Jump-Diffusion Projection)")
                         st.plotly_chart(fig, use_container_width=True)
 
                         st.markdown("---")
@@ -471,8 +495,8 @@ if check_login():
                         
                         if tier == "GOD_MODE":
                             metrics_dict = {
-                                "Metric": ["Ticker", "Timestamp", "Price", "Alpha Score", "Trend", "Volatility", "Reversal Signal", "VRP Edge", "Sharpe Ratio", "Support", "Resistance", "95% VaR (Variance)", "Win Rate", "Net Return", "Alpha", "Markdown % (Max DD)", "Strategy", "Legs", "Premium Target", "POP", "Ideal DTE"],
-                                "Value": [ticker, datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S'), f"${curr_price:.2f}", f"{score}/100", plan['bias'], f"{vol:.1f}%", reversal, f"{vrp_edge:+.2f}%", f"{sharpe:.2f}", f"${sup:.2f}", f"${res:.2f}", f"${stop_loss_var95:.2f}", f"{win_rate:.1f}%", f"{strat_ret:+.1f}%", f"{outperf:+.1f}%", f"{max_dd:.1f}%", plan['name'], plan['legs'], plan['premium'], f"{plan['pop']}%", plan['dte']]
+                                "Metric": ["Ticker", "Timestamp", "Price", "Alpha Score", "Trend", "Volatility", "Reversal Signal", "VRP Edge", "Sharpe Ratio", "Support", "Resistance", "95% VaR (Variance)", "Win Rate", "Net Return", "Alpha", "Markdown % (Max DD)", "Kelly % (Half)", "Strategy", "Legs", "Premium Target", "POP", "Ideal DTE"],
+                                "Value": [ticker, datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S'), f"${curr_price:.2f}", f"{score}/100", plan['bias'], f"{vol:.1f}%", reversal, f"{vrp_edge:+.2f}%", f"{sharpe:.2f}", f"${sup:.2f}", f"${res:.2f}", f"${stop_loss_var95:.2f}", f"{win_rate:.1f}%", f"{strat_ret:+.1f}%", f"{outperf:+.1f}%", f"{max_dd:.1f}%", f"{kelly:.1f}%", plan['name'], plan['legs'], plan['premium'], f"{plan['pop']}%", plan['dte']]
                             }
                             csv_data = pd.DataFrame(metrics_dict).to_csv(index=False).encode('utf-8')
                             st.download_button(label="📥 Download God Mode Data (CSV)", data=csv_data, file_name=f"{ticker}_HQTA_GodMode.csv", mime="text/csv")
