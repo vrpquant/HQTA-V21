@@ -338,7 +338,7 @@ def check_login():
         
         st.markdown("---")
         st.markdown("### 👑 Founding Member Cohort (Beta)")
-        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta today to lock in your lifetime discounted rate.")
+        st.caption("Institutional pricing is $299/mo (Analyst)and $999/mo (God Mode). Join the Private Beta today to lock in your lifetime discounted rate.")
         
         b1, b2 = st.columns(2)
         with b1:
