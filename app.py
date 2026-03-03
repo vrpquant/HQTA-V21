@@ -273,9 +273,18 @@ class MarketScanner:
                         "Resistance": round(res,2), "Win Rate": f"{win_rate}%", "Max DD": f"{max_dd}%",
                         "Kelly": f"{kelly}%", "Strategy": plan['name']
                     })
-            except:
+            except Exception as e:
+                # This will print the exact reason for the failure in your Streamlit Cloud logs
+                print(f"⚠️ [ENGINE WARNING] Data pull failed for {t}: {e}") 
                 pass
-        return pd.DataFrame(results).sort_values("Alpha Score", ascending=False)
+                
+        # THE FIX: Check if the results are empty before trying to sort them
+        df_results = pd.DataFrame(results)
+        if df_results.empty:
+            st.warning("⚠️ Institutional Data Feed temporarily unavailable. The server is being rate-limited. Please try again in a few minutes.")
+            return df_results
+            
+        return df_results.sort_values("Alpha Score", ascending=False)
 
 # ==========================================
 # --- STREAMLIT APP (100% unchanged UI) ---
