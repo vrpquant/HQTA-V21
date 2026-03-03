@@ -1,75 +1,75 @@
 Ticker,Price,Alpha Score,Trend,VRP Edge,Vol,Support,Resistance,Win Rate,Max DD,Kelly,Strategy
-LMT,664.54,75,LONG (Bullish Trend),+17.2%,23.9%,462.44,692.0,46.7%,-36.8%,30.7%,Long Call Vertical
-XLE,56.22,75,LONG (Bullish Trend),+26.2%,22.0%,43.61,57.88,48.3%,-34.8%,25.6%,Long Call Vertical
-XOM,150.87,75,LONG (Bullish Trend),+26.1%,22.4%,114.86,159.61,51.1%,-20.2%,28.1%,Long Call Vertical
-MRK,120.56,75,LONG (Bullish Trend),+5.7%,26.6%,98.86,125.14,52.3%,-25.2%,31.2%,Long Call Vertical
-GLD,470.33,75,LONG (Bullish Trend),+14.2%,21.4%,395.33,509.7,53.3%,-25.1%,29.4%,Long Call Vertical
-CVX,187.92,75,LONG (Bullish Trend),+27.4%,22.3%,145.66,191.56,50.9%,-26.0%,24.9%,Long Call Vertical
-XLP,88.11,75,LONG (Bullish Trend),+10.2%,12.4%,76.51,90.14,48.5%,-18.1%,21.9%,Long Call Vertical
-SLV,75.36,75,LONG (Bullish Trend),+29.7%,44.4%,58.58,109.83,52.1%,-37.1%,30.6%,Short Put Vertical
-JNJ,247.3,74,LONG (Bullish Trend),+3.1%,17.8%,199.85,251.71,50.7%,-24.1%,34.2%,Long Call Vertical
-XLV,157.15,73,LONG (Bullish Trend),+8.0%,14.7%,152.97,160.59,47.9%,-14.1%,28.7%,Long Call Vertical
-MU,381.08,72,LONG (Bullish Trend),+9.7%,60.3%,244.9,455.5,51.1%,-61.7%,28.5%,Short Put Vertical
-LLY,1007.76,72,LONG (Bullish Trend),+5.2%,37.2%,991.92,1132.06,45.9%,-38.1%,29.2%,Short Put Vertical
-PEP,165.12,71,LONG (Bullish Trend),+6.4%,20.5%,136.01,171.48,50.7%,-17.8%,28.8%,Long Call Vertical
-PLD,141.17,71,LONG (Bullish Trend),+1.6%,26.4%,125.47,143.95,50.9%,-44.7%,23.0%,Long Call Vertical
-PFE,26.76,70,LONG (Bullish Trend),-1.4%,24.9%,24.42,27.94,50.5%,-24.2%,22.7%,Long Call Vertical
-CMCSA,31.24,69,LONG (Bullish Trend),+6.8%,25.6%,26.79,32.86,49.7%,-33.2%,20.8%,Long Call Vertical
-HON,246.34,68,LONG (Bullish Trend),+2.4%,22.3%,192.39,248.18,49.1%,-57.7%,13.1%,Long Call Vertical
-CAT,721.21,67,LONG (Bullish Trend),+11.3%,30.5%,560.6,789.81,49.5%,-42.6%,28.0%,Long Call Vertical
-RTX,206.01,67,LONG (Bullish Trend),+14.9%,23.8%,177.5,214.5,52.9%,-31.5%,26.2%,Long Call Vertical
-INTC,43.51,66,LONG (Bullish Trend),-4.2%,61.7%,34.95,54.6,51.1%,-48.3%,31.1%,Short Put Vertical
-KO,79.44,66,LONG (Bullish Trend),+7.7%,15.8%,67.27,82.0,46.1%,-30.7%,25.5%,Long Call Vertical
-NEE,92.6,65,LONG (Bullish Trend),-1.3%,26.5%,77.83,95.26,46.1%,-51.3%,24.6%,Long Call Vertical
-BA,224.39,65,LONG (Bullish Trend),-0.3%,34.8%,207.66,254.35,49.3%,-44.0%,25.0%,Long Call Vertical
-BAC,50.35,65,LONG (Bullish Trend),+1.3%,25.4%,48.5,57.55,48.7%,-55.9%,15.4%,Long Call Vertical
-XLI,175.88,63,LONG (Bullish Trend),+3.3%,16.8%,153.53,179.31,50.1%,-33.6%,20.6%,Long Call Vertical
-GOOGL,302.28,62,LONG (Bullish Trend),-8.7%,29.8%,296.25,349.0,45.1%,-66.6%,24.4%,Long Call Vertical
-SMH,392.39,62,LONG (Bullish Trend),+5.9%,36.5%,344.76,427.94,50.7%,-57.0%,20.9%,Short Put Vertical
-TSLA,393.61,61,LONG (Bullish Trend),-35.0%,62.8%,385.4,498.83,46.3%,-93.7%,16.1%,Short Put Vertical
-TSM,354.73,61,LONG (Bullish Trend),+4.8%,40.7%,281.75,390.21,47.1%,-69.8%,23.7%,Short Put Vertical
-UNH,289.26,61,LONG (Bullish Trend),-5.5%,41.6%,266.29,357.87,47.9%,-51.9%,30.3%,Short Put Vertical
-WMT,128.24,58,NEUTRAL (Mean-Reverting),+1.8%,22.7%,109.81,134.69,47.3%,-48.2%,25.5%,Iron Condor
-GS,867.17,58,NEUTRAL (Mean-Reverting),+2.6%,30.1%,824.64,979.54,50.7%,-51.9%,20.7%,Iron Condor
-SBUX,96.97,58,NEUTRAL (Mean-Reverting),-7.9%,36.3%,82.49,104.15,51.9%,-52.3%,18.0%,Iron Condor
-PSA,306.86,57,NEUTRAL (Mean-Reverting),-0.6%,23.0%,256.54,312.86,46.9%,-49.2%,19.9%,Iron Condor
-PG,160.32,57,NEUTRAL (Mean-Reverting),+7.6%,17.6%,136.65,167.25,47.9%,-29.1%,21.8%,Iron Condor
-AAPL,262.88,56,NEUTRAL (Mean-Reverting),+2.4%,28.5%,243.19,280.65,45.1%,-67.5%,17.4%,Iron Condor
-MCD,330.95,55,NEUTRAL (Mean-Reverting),+3.6%,18.1%,298.33,341.75,49.7%,-24.7%,25.4%,Iron Condor
-AMD,191.93,54,NEUTRAL (Mean-Reverting),-1.5%,55.5%,188.22,266.96,49.7%,-59.3%,28.3%,Iron Condor
-XLRE,43.82,54,NEUTRAL (Mean-Reverting),+2.7%,16.3%,39.72,44.07,45.9%,-35.5%,21.3%,Iron Condor
-MS,166.81,53,NEUTRAL (Mean-Reverting),+6.7%,29.7%,159.95,192.68,49.9%,-52.4%,20.6%,Iron Condor
-ABBV,235.16,52,NEUTRAL (Mean-Reverting),-1.4%,25.8%,204.27,235.66,50.7%,-30.2%,26.0%,Iron Condor
-USO,89.86,49,NEUTRAL (Mean-Reverting),+65.3%,29.7%,67.1,94.37,49.5%,-58.6%,17.4%,Iron Condor
-QCOM,138.63,48,NEUTRAL (Mean-Reverting),-9.9%,38.7%,132.73,184.45,50.1%,-35.8%,23.7%,Iron Condor
-NKE,59.81,47,NEUTRAL (Mean-Reverting),-2.2%,37.8%,56.61,68.04,49.5%,-50.0%,24.9%,Iron Condor
-VZ,50.92,47,NEUTRAL (Mean-Reverting),+4.0%,22.3%,38.68,51.1,45.1%,-46.4%,20.7%,Iron Condor
-AVGO,314.05,46,NEUTRAL (Mean-Reverting),+45.1%,53.6%,295.3,360.66,51.5%,-77.8%,17.6%,Iron Condor
-HD,367.55,46,NEUTRAL (Mean-Reverting),+6.2%,22.3%,337.71,397.63,47.5%,-62.5%,15.5%,Iron Condor
-WFC,83.22,45,NEUTRAL (Mean-Reverting),+7.5%,29.4%,78.94,97.28,50.9%,-41.9%,21.8%,Iron Condor
-XLY,114.61,45,NEUTRAL (Mean-Reverting),+6.4%,21.6%,111.81,125.01,46.3%,-57.9%,16.8%,Iron Condor
-NVDA,179.95,44,NEUTRAL (Mean-Reverting),-18.1%,49.8%,171.03,197.63,48.7%,-71.6%,20.2%,Iron Condor
-AEP,132.44,44,NEUTRAL (Mean-Reverting),+4.8%,18.5%,111.66,134.6,52.5%,-26.6%,27.5%,Iron Condor
-GE,335.58,44,NEUTRAL (Mean-Reverting),+0.1%,31.7%,290.07,348.48,51.9%,-39.5%,28.2%,Iron Condor
-COST,1013.36,44,NEUTRAL (Mean-Reverting),+21.2%,21.0%,846.8,1028.44,48.3%,-38.0%,21.0%,Iron Condor
-EQIX,977.36,43,NEUTRAL (Mean-Reverting),+1.7%,27.1%,736.32,987.52,48.7%,-57.6%,19.5%,Iron Condor
-AMZN,208.62,39,SHORT (Bearish Trend),-9.5%,31.6%,196.0,248.94,48.5%,-65.2%,15.8%,Long Put Vertical
-AMT,190.24,39,SHORT (Bearish Trend),+5.4%,25.4%,166.88,195.45,47.7%,-44.6%,22.3%,Long Put Vertical
-SRE,95.35,39,SHORT (Bearish Trend),-1.0%,25.6%,83.91,97.45,48.7%,-57.5%,16.4%,Long Put Vertical
-XLC,118.12,38,SHORT (Bearish Trend),+4.3%,16.7%,113.18,120.4,48.1%,-35.7%,25.1%,Long Put Vertical
-CHTR,231.69,37,SHORT (Bearish Trend),+14.7%,38.9%,180.38,249.24,49.9%,-62.8%,18.0%,Short Call Vertical
-CCI,90.58,36,SHORT (Bearish Trend),+0.1%,25.5%,77.01,91.95,47.3%,-36.4%,26.0%,Long Put Vertical
-XLF,51.46,36,SHORT (Bearish Trend),+3.5%,17.4%,50.08,56.52,49.1%,-30.0%,21.5%,Long Put Vertical
-ETH-USD,1985.79,34,SHORT (Bearish Trend),+0.0%,60.5%,1748.63,3397.9,50.9%,-81.0%,22.0%,Short Call Vertical
-TMUS,218.6,34,SHORT (Bearish Trend),+8.9%,24.3%,180.49,223.67,46.7%,-46.3%,20.2%,Long Put Vertical
-T,28.65,33,SHORT (Bearish Trend),+7.1%,21.6%,22.95,29.3,49.5%,-36.5%,18.4%,Long Put Vertical
-V,321.71,32,SHORT (Bearish Trend),+4.9%,20.9%,303.08,357.88,49.5%,-23.5%,26.6%,Long Put Vertical
-JPM,300.62,30,SHORT (Bearish Trend),+6.9%,25.3%,289.5,335.87,50.5%,-37.0%,23.8%,Long Put Vertical
-META,656.42,29,SHORT (Bearish Trend),-10.0%,35.3%,600.0,744.0,47.7%,-59.8%,20.9%,Short Call Vertical
-MSFT,404.99,28,SHORT (Bearish Trend),+2.0%,24.1%,381.71,488.58,46.1%,-46.0%,23.9%,Long Put Vertical
-XLU,47.19,26,SHORT (Bearish Trend),+5.0%,15.6%,41.74,47.8,49.7%,-27.5%,24.9%,Long Put Vertical
-BTC-USD,68398.35,26,SHORT (Bearish Trend),+0.0%,41.0%,60074.2,97860.6,49.8%,-59.0%,23.4%,Short Call Vertical
-COIN,185.6,25,SHORT (Bearish Trend),-12.4%,79.5%,139.36,263.07,51.9%,-95.4%,12.7%,Short Call Vertical
-MA,526.62,25,SHORT (Bearish Trend),+8.1%,20.6%,490.0,588.79,49.5%,-27.6%,24.2%,Long Put Vertical
-DUK,131.43,20,SHORT (Bearish Trend),+4.5%,16.4%,114.03,132.2,50.7%,-26.1%,21.1%,Long Put Vertical
-SO,97.24,18,SHORT (Bearish Trend),+1.7%,17.3%,84.18,97.97,47.7%,-30.3%,20.8%,Long Put Vertical
+CMCSA,31.01,84,LONG (Bullish Trend),+8.8%,25.6%,26.79,32.86,49.7%,-33.2%,20.7%,Long Call Vertical
+CVX,188.76,75,LONG (Bullish Trend),+10.1%,22.3%,145.66,191.56,50.9%,-26.0%,25.0%,Long Call Vertical
+XOM,151.82,75,LONG (Bullish Trend),+11.4%,22.4%,114.86,159.61,51.1%,-20.2%,28.2%,Long Call Vertical
+SLV,74.7,75,LONG (Bullish Trend),+47.0%,44.5%,58.58,109.83,52.1%,-37.1%,30.4%,Short Put Vertical
+XLE,56.52,75,LONG (Bullish Trend),+7.7%,22.0%,43.61,57.88,48.3%,-34.8%,25.7%,Long Call Vertical
+LMT,667.81,75,LONG (Bullish Trend),+14.9%,23.9%,462.44,692.0,46.7%,-36.8%,30.8%,Long Call Vertical
+GLD,468.06,75,LONG (Bullish Trend),+25.8%,21.4%,395.33,509.7,53.3%,-25.1%,29.3%,Long Call Vertical
+MRK,119.82,75,LONG (Bullish Trend),+12.0%,26.6%,98.86,125.14,52.3%,-25.2%,31.1%,Long Call Vertical
+XLP,87.74,75,LONG (Bullish Trend),+16.7%,12.4%,76.51,90.14,48.5%,-18.1%,21.7%,Long Call Vertical
+JNJ,246.75,74,LONG (Bullish Trend),+10.2%,17.8%,199.85,251.71,50.7%,-24.1%,34.1%,Long Call Vertical
+XLV,156.78,73,LONG (Bullish Trend),+9.2%,14.8%,152.97,160.59,47.9%,-14.1%,28.6%,Long Call Vertical
+MU,379.68,72,LONG (Bullish Trend),+19.8%,60.3%,244.9,455.5,51.1%,-61.7%,28.4%,Short Put Vertical
+LLY,1007.73,72,LONG (Bullish Trend),+3.9%,37.2%,991.92,1132.06,45.9%,-38.1%,29.2%,Short Put Vertical
+PEP,164.91,71,LONG (Bullish Trend),+9.2%,20.5%,136.01,171.48,50.7%,-17.8%,28.8%,Long Call Vertical
+PLD,141.0,71,LONG (Bullish Trend),+0.8%,26.4%,125.47,143.95,50.9%,-44.7%,23.0%,Long Call Vertical
+PFE,26.6,70,LONG (Bullish Trend),+12.8%,24.9%,24.42,27.94,50.5%,-24.2%,22.6%,Long Call Vertical
+HON,243.85,68,LONG (Bullish Trend),+11.9%,22.3%,192.39,248.18,49.1%,-57.7%,12.9%,Long Call Vertical
+CAT,722.58,67,LONG (Bullish Trend),+17.6%,30.5%,560.6,789.81,49.5%,-42.6%,28.1%,Long Call Vertical
+RTX,206.52,67,LONG (Bullish Trend),+15.1%,23.8%,177.5,214.5,52.9%,-31.5%,26.2%,Long Call Vertical
+INTC,43.1,66,LONG (Bullish Trend),+10.2%,61.7%,34.95,54.6,51.1%,-48.3%,31.1%,Short Put Vertical
+KO,79.34,66,LONG (Bullish Trend),+12.6%,15.8%,67.27,82.0,46.1%,-30.7%,25.5%,Long Call Vertical
+BAC,49.97,65,LONG (Bullish Trend),+6.0%,25.3%,48.5,57.55,48.7%,-55.9%,15.3%,Long Call Vertical
+BA,224.07,65,LONG (Bullish Trend),+4.4%,34.8%,207.66,254.35,49.3%,-44.0%,25.0%,Long Call Vertical
+NEE,92.58,65,LONG (Bullish Trend),+3.0%,26.5%,77.83,95.26,46.1%,-51.3%,24.6%,Long Call Vertical
+XLI,175.44,63,LONG (Bullish Trend),+9.3%,16.8%,153.53,179.31,50.1%,-33.6%,20.6%,Long Call Vertical
+SMH,391.06,62,LONG (Bullish Trend),+13.4%,36.6%,344.76,427.94,50.7%,-57.0%,20.9%,Short Put Vertical
+GOOGL,303.58,62,LONG (Bullish Trend),-7.1%,29.8%,296.25,349.0,45.1%,-66.6%,24.4%,Long Call Vertical
+UNH,289.1,61,LONG (Bullish Trend),-5.3%,41.6%,266.29,357.87,47.9%,-51.9%,30.3%,Short Put Vertical
+TSM,353.13,61,LONG (Bullish Trend),+14.2%,40.7%,281.75,390.21,47.1%,-69.8%,23.6%,Short Put Vertical
+TSLA,392.43,61,LONG (Bullish Trend),-27.5%,62.8%,385.4,498.83,46.3%,-93.7%,16.1%,Short Put Vertical
+WFC,82.54,60,LONG (Bullish Trend),+8.3%,29.4%,78.94,97.28,50.7%,-41.9%,22.0%,Long Call Vertical
+GS,862.51,58,NEUTRAL (Mean-Reverting),+10.7%,30.1%,824.64,979.54,50.7%,-51.9%,20.6%,Iron Condor
+SBUX,96.68,58,NEUTRAL (Mean-Reverting),-3.6%,36.3%,82.49,104.15,51.7%,-52.3%,18.2%,Iron Condor
+WMT,127.91,58,NEUTRAL (Mean-Reverting),+9.0%,22.7%,109.81,134.69,47.3%,-48.2%,25.5%,Iron Condor
+PG,159.76,57,NEUTRAL (Mean-Reverting),+8.3%,17.6%,136.65,167.25,47.9%,-29.1%,21.9%,Iron Condor
+PSA,306.14,57,NEUTRAL (Mean-Reverting),+0.6%,23.0%,256.54,312.86,46.9%,-49.2%,19.9%,Iron Condor
+AAPL,263.75,56,NEUTRAL (Mean-Reverting),-7.8%,28.5%,243.19,280.65,45.1%,-67.5%,17.4%,Iron Condor
+MCD,332.15,55,NEUTRAL (Mean-Reverting),-1.2%,18.1%,298.33,341.75,49.7%,-24.7%,25.5%,Iron Condor
+XLRE,43.7,54,NEUTRAL (Mean-Reverting),+2.8%,16.3%,39.72,44.07,45.9%,-35.5%,21.3%,Iron Condor
+AMD,190.95,54,NEUTRAL (Mean-Reverting),+4.3%,55.5%,188.22,266.96,49.7%,-59.3%,28.3%,Iron Condor
+MS,165.95,53,NEUTRAL (Mean-Reverting),+20.3%,29.7%,159.95,192.68,49.9%,-52.4%,20.5%,Iron Condor
+ABBV,233.86,52,NEUTRAL (Mean-Reverting),+7.5%,25.8%,204.27,235.71,50.5%,-30.2%,26.2%,Iron Condor
+USO,90.15,49,NEUTRAL (Mean-Reverting),+35.6%,29.8%,67.1,94.37,49.5%,-58.6%,17.4%,Iron Condor
+QCOM,138.13,48,NEUTRAL (Mean-Reverting),-10.0%,38.7%,132.73,184.45,50.1%,-35.8%,23.7%,Iron Condor
+VZ,50.87,47,NEUTRAL (Mean-Reverting),+3.2%,22.3%,38.68,51.1,45.1%,-46.4%,20.7%,Iron Condor
+NKE,59.39,47,NEUTRAL (Mean-Reverting),+8.1%,37.9%,56.61,68.04,49.5%,-50.0%,25.0%,Iron Condor
+HD,366.97,46,NEUTRAL (Mean-Reverting),+5.3%,22.3%,337.71,397.63,47.5%,-62.5%,15.5%,Iron Condor
+AVGO,313.84,46,NEUTRAL (Mean-Reverting),+49.6%,53.6%,295.3,360.66,51.5%,-77.8%,17.6%,Iron Condor
+XLY,114.36,45,NEUTRAL (Mean-Reverting),+7.6%,21.6%,111.81,125.01,46.3%,-57.9%,16.7%,Iron Condor
+AEP,131.92,44,NEUTRAL (Mean-Reverting),+13.0%,18.5%,111.66,134.6,52.5%,-26.6%,27.4%,Iron Condor
+NVDA,180.05,44,NEUTRAL (Mean-Reverting),-11.7%,49.8%,171.03,197.63,48.7%,-71.6%,20.2%,Iron Condor
+COST,1007.77,44,NEUTRAL (Mean-Reverting),+25.9%,20.9%,846.8,1028.44,48.3%,-38.0%,21.1%,Iron Condor
+GE,334.24,44,NEUTRAL (Mean-Reverting),+11.0%,31.7%,290.07,348.48,51.9%,-39.5%,28.2%,Iron Condor
+EQIX,972.01,43,NEUTRAL (Mean-Reverting),+6.1%,27.1%,736.32,987.52,48.7%,-57.6%,19.4%,Iron Condor
+AMT,190.25,39,SHORT (Bearish Trend),+5.3%,25.4%,166.88,195.45,47.7%,-44.6%,22.3%,Long Put Vertical
+AMZN,208.73,39,SHORT (Bearish Trend),-1.6%,31.6%,196.0,248.94,48.5%,-65.2%,15.8%,Long Put Vertical
+SRE,95.32,39,SHORT (Bearish Trend),+1.3%,25.6%,83.91,97.45,48.7%,-57.5%,16.4%,Long Put Vertical
+XLC,117.96,38,SHORT (Bearish Trend),+5.0%,16.7%,113.18,120.4,48.1%,-35.7%,25.1%,Long Put Vertical
+CHTR,229.41,37,SHORT (Bearish Trend),+13.1%,38.9%,180.38,249.24,49.9%,-62.8%,18.1%,Short Call Vertical
+CCI,90.27,36,SHORT (Bearish Trend),+4.2%,25.4%,77.01,91.95,47.3%,-36.4%,26.1%,Long Put Vertical
+XLF,51.21,36,SHORT (Bearish Trend),+9.7%,17.4%,50.08,56.52,48.9%,-30.0%,21.6%,Long Put Vertical
+TMUS,218.53,34,SHORT (Bearish Trend),+9.8%,24.3%,180.49,223.67,46.7%,-46.3%,20.2%,Long Put Vertical
+ETH-USD,1968.08,34,SHORT (Bearish Trend),+0.0%,60.5%,1748.63,3397.9,50.9%,-81.0%,22.1%,Short Call Vertical
+T,28.68,33,SHORT (Bearish Trend),+6.7%,21.7%,22.95,29.3,49.5%,-36.5%,18.4%,Long Put Vertical
+V,320.84,32,SHORT (Bearish Trend),+8.8%,20.9%,303.08,357.88,49.5%,-23.5%,26.6%,Long Put Vertical
+JPM,300.21,30,SHORT (Bearish Trend),+3.2%,25.3%,289.5,335.87,50.5%,-37.0%,23.8%,Long Put Vertical
+META,655.08,29,SHORT (Bearish Trend),-7.4%,35.3%,600.0,744.0,47.7%,-59.8%,20.9%,Short Call Vertical
+MSFT,403.93,28,SHORT (Bearish Trend),+0.7%,24.1%,381.71,488.58,46.1%,-46.0%,24.0%,Long Put Vertical
+XLU,47.07,26,SHORT (Bearish Trend),+12.7%,15.6%,41.74,47.8,49.7%,-27.5%,24.8%,Long Put Vertical
+BTC-USD,68041.39,26,SHORT (Bearish Trend),+0.0%,41.0%,60074.2,97860.6,49.8%,-59.0%,23.4%,Short Call Vertical
+COIN,182.36,25,SHORT (Bearish Trend),+0.5%,79.5%,139.36,263.07,52.1%,-95.4%,12.5%,Short Call Vertical
+MA,524.32,25,SHORT (Bearish Trend),+8.1%,20.6%,490.0,588.79,49.5%,-27.6%,24.3%,Long Put Vertical
+DUK,131.41,20,SHORT (Bearish Trend),+7.2%,16.4%,114.03,132.29,50.7%,-26.1%,21.1%,Long Put Vertical
+SO,96.8,18,SHORT (Bearish Trend),+13.6%,17.4%,84.18,97.97,47.9%,-30.3%,20.6%,Long Put Vertical
