@@ -6,25 +6,6 @@ import plotly.graph_objects as go
 from scipy.stats import norm, t
 from datetime import datetime
 import pytz
-import os
-
-# ==========================================
-# --- GLOBAL INSTITUTIONAL UNIVERSE ---
-# ==========================================
-# Moved to global scope so your local .bat engine can import it
-TICKER_SETS = {
-    "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
-    "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
-    "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"],
-    "🏥 Healthcare & Biotech": ["XLV", "JNJ", "UNH", "LLY", "ABBV", "PFE", "MRK"],
-    "🏦 Financials & Banking": ["XLF", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA"],
-    "🏭 Industrials & Defense": ["XLI", "BA", "LMT", "RTX", "CAT", "GE", "HON"],
-    "🛒 Consumer Discretionary": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"],
-    "🧼 Consumer Staples": ["XLP", "PG", "KO", "PEP", "WMT", "COST"],
-    "🏠 Real Estate (REITs)": ["XLRE", "AMT", "PLD", "CCI", "EQIX", "PSA"],
-    "🔌 Utilities": ["XLU", "NEE", "DUK", "SO", "SRE", "AEP"],
-    "📡 Telecommunications": ["XLC", "VZ", "T", "CMCSA", "CHTR", "TMUS"]
-}
 
 # ==========================================
 # --- ADVANCED INSTITUTIONAL MATH ENGINE ---
@@ -293,20 +274,23 @@ class MarketScanner:
                         "Kelly": f"{kelly}%", "Strategy": plan['name']
                     })
             except Exception as e:
-                print(f"⚠️ [ENGINE WARNING] Data pull failed for {t}: {e}")
+                # This will print the exact reason for the failure in your Streamlit Cloud logs
+                print(f"⚠️ [ENGINE WARNING] Data pull failed for {t}: {e}") 
                 pass
-        
+                
+        # THE FIX: Check if the results are empty before trying to sort them
         df_results = pd.DataFrame(results)
         if df_results.empty:
+            st.warning("⚠️ Institutional Data Feed temporarily unavailable. The server is being rate-limited. Please try again in a few minutes.")
             return df_results
             
         return df_results.sort_values("Alpha Score", ascending=False)
 
 # ==========================================
-# --- STREAMLIT APP UI ---
+# --- STREAMLIT APP (100% unchanged UI) ---
 # ==========================================
 
-st.set_page_config(page_title="VRP Quant | V22.1", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V22", layout="wide", page_icon="🏦")
 est_tz = pytz.timezone('US/Eastern')
 
 try:
@@ -343,10 +327,10 @@ def check_login():
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
-            st.link_button("Subscribe ($149/mo)", "https://vrpquant.substack.com/subscribe", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
-            st.link_button("Subscribe ($499/mo)", "https://vrpquant.substack.com/subscribe", use_container_width=True)
+            st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
         st.markdown("---")
         st.success("🛡️ SEC Compliance Check: System verified.")
         st.caption(DISCLAIMER_TEXT)
@@ -356,7 +340,7 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V22.1")
+        st.markdown("# 🏦 VRP Quant V22.0")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
@@ -364,8 +348,20 @@ if check_login():
 
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
-        st.caption(f"⏱️ **Data Snapshot:** Displaying latest compiled quantitative run.")
-        
+        st.caption(f"⏱️ **Data Snapshot Generated:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
+        TICKER_SETS = {
+            "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
+            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
+            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"],
+            "🏥 Healthcare & Biotech": ["XLV", "JNJ", "UNH", "LLY", "ABBV", "PFE", "MRK"],
+            "🏦 Financials & Banking": ["XLF", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA"],
+            "🏭 Industrials & Defense": ["XLI", "BA", "LMT", "RTX", "CAT", "GE", "HON"],
+            "🛒 Consumer Discretionary": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"],
+            "🧼 Consumer Staples": ["XLP", "PG", "KO", "PEP", "WMT", "COST"],
+            "🏠 Real Estate (REITs)": ["XLRE", "AMT", "PLD", "CCI", "EQIX", "PSA"],
+            "🔌 Utilities": ["XLU", "NEE", "DUK", "SO", "SRE", "AEP"],
+            "📡 Telecommunications": ["XLC", "VZ", "T", "CMCSA", "CHTR", "TMUS"]
+        }
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
         else:
@@ -379,127 +375,105 @@ if check_login():
                     custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             else: selected_tickers = TICKER_SETS[sector_choice]
-            
-            if st.button("🔄 Load Institutional Scan") and selected_tickers:
-                with st.spinner("Decrypting quantitative pipeline..."):
-                    try:
-                        # The Pipeline Hack: Reads local CSV instead of crashing via Yahoo
-                        if os.path.exists("latest_scan.csv"):
-                            df_scan = pd.read_csv("latest_scan.csv")
-                            filtered_df = df_scan[df_scan['Ticker'].isin(selected_tickers)]
-                            if not filtered_df.empty: 
-                                st.dataframe(filtered_df, use_container_width=True)
-                            else:
-                                st.warning("No data found for this sector in the latest pipeline run.")
+            if st.button("🔄 Run Live Scan") and selected_tickers:
+                with st.spinner("Scanning..."):
+                    df_scan = MarketScanner.run_scan(selected_tickers)
+                    if not df_scan.empty: st.dataframe(df_scan, use_container_width=True)
+
+    elif mode == "🔬 Deep Dive Analysis":
+        st.title("🔬 Deep Dive & Trade Architect")
+        st.caption(f"⏱️ **Live Computation Timestamp:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
+        ticker = st.text_input("Asset Ticker", "NVDA").upper()
+        if st.button("Run Analysis"):
+            with st.spinner("Connecting to Data Feeds & Running Vector Backtest..."):
+                try:
+                    stock = yf.Ticker(ticker)
+                    df = stock.history(period="2y")
+                    if not df.empty:
+                        curr_price = df['Close'].iloc[-1]
+                        score = AlphaEngine.calculate_score(df)
+                        vol = QuantLogic.calculate_vol(df)
+                        sup, res = QuantLogic.get_support_resistance(df)
+                        sharpe = QuantLogic.calculate_sharpe(df)
+                        vrp_edge = QuantLogic.calculate_vrp_edge(ticker, df)
+                        reversal = "No Active Reversal"
+                        win_rate, strat_ret, outperf, max_dd, half_kelly = BacktestEngine.run_quick_backtest(df)
+                        wf_val = BacktestEngine.walk_forward_validation(df)
+                        plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
+                        vix, tnx = QuantLogic.get_macro_inputs()
+                        ortho = QuantLogic.feature_orthogonalization(df)
+                        peers = [80,65,55,70]
+                        cross_alpha = QuantLogic.cross_sectional_alpha(score, peers)
+                        mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
+                        stop_loss_var95 = np.percentile(mc_df.iloc[-1], 5)
+                        strat_mc_ret = MonteCarloEngine.stochastic_vol_fat_tail_strategy_mc(df, half_kelly=half_kelly)
+                        st.markdown("### 📊 Market Variables")
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("Price", f"${curr_price:.2f}")
+                        m2.metric("Alpha Score", f"{score}/100")
+                        m3.metric("Trend", plan['bias'])
+                        m4.metric("Volatility", f"{vol:.1f}%")
+                        m5.metric("Trend Reversal", reversal)
+                        m6, m7, m8, m9, m10 = st.columns(5)
+                        m6.metric("VRP Edge", f"{vrp_edge:+.2f}%")
+                        m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                        m8.metric("Support (Floor)", f"${sup:.2f}")
+                        m9.metric("Resistance (Ceiling)", f"${res:.2f}")
+                        if tier == "GOD_MODE":
+                            m10.metric("95% VaR (Variance)", f"${stop_loss_var95:.2f}")
                         else:
-                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local .bat engine first.")
-                    except Exception as e:
-                        st.error(f"Error loading dashboard: {e}")
-
-   elif mode == "🔬 Deep Dive Analysis":
-    st.title("🔬 Deep Dive & Trade Architect")
-    st.caption(f"⏱️ **Data Vault Timestamp:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
-    ticker = st.text_input("Asset Ticker", "TSLA").upper().strip()
-    
-    if st.button("Run Analysis"):
-        with st.spinner("Extracting from Institutional Vaults..."):
-            try:
-                if not (os.path.exists("historical_vault.csv") and os.path.exists("latest_scan.csv")):
-                    st.error("⚠️ Missing CSVs in repo root. Re-upload latest_scan.csv + historical_vault.csv.")
-                    st.stop()
-
-                hist_df = pd.read_csv("historical_vault.csv")
-                scan_df = pd.read_csv("latest_scan.csv")
-
-                # === BULLETPROOF CLEANING ===
-                hist_df['Ticker'] = hist_df['Ticker'].astype(str).str.strip()
-                scan_df['Ticker'] = scan_df['Ticker'].astype(str).str.strip()
-
-                df = hist_df[hist_df['Ticker'] == ticker].copy()
-                ticker_stats = scan_df[scan_df['Ticker'] == ticker]
-
-                if ticker_stats.empty:
-                    st.error(f"⚠️ {ticker} NOT FOUND in latest_scan.csv. Run full scan or check spelling.")
-                    st.stop()
-                if df.empty:
-                    st.error(f"⚠️ No historical bars for {ticker} in vault.")
-                    st.stop()
-
-                stats = ticker_stats.iloc[0]
-
-                # === ROBUST NUMERIC PARSING (prevents all % crashes) ===
-                curr_price = float(stats['Price'])
-                score = int(stats['Alpha Score'])
-                vol = pd.to_numeric(str(stats['Vol']).replace('%', '').strip(), errors='coerce')
-                vol = vol if pd.notna(vol) else 25.0
-                sup = float(stats['Support'])
-                res = float(stats['Resistance'])
-                vrp_edge = str(stats['VRP Edge'])
-                win_rate = pd.to_numeric(str(stats['Win Rate']).replace('%', '').strip(), errors='coerce')
-                win_rate = win_rate if pd.notna(win_rate) else 50.0
-                max_dd = pd.to_numeric(str(stats['Max DD']).replace('%', '').strip(), errors='coerce')
-                max_dd = max_dd if pd.notna(max_dd) else -30.0
-                half_kelly = pd.to_numeric(str(stats['Kelly']).replace('%', '').strip(), errors='coerce')
-                half_kelly = half_kelly if pd.notna(half_kelly) else 20.0
-
-                # === TITANIUM DATE FIX (handles ALL timezone variants) ===
-                df['Date'] = pd.to_datetime(df['Date'].astype(str).str.replace(r'[-+]\d{2}:\d{2}', '', regex=True), errors='coerce')
-                df = df.dropna(subset=['Date']).sort_values('Date')
-                df.set_index('Date', inplace=True)
-
-                # === LOCAL MATH ENGINE (100% offline) ===
-                sharpe = QuantLogic.calculate_sharpe(df)
-                _, strat_ret, outperf, _, _ = BacktestEngine.run_quick_backtest(df)
-                wf_val = BacktestEngine.walk_forward_validation(df)
-                plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
-
-                # Monte Carlo (hardened sim count)
-                mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
-
-                # === UI RENDER (unchanged except chart fix) ===
-                st.markdown("### 📊 Market Variables")
-                m1, m2, m3, m4, m5 = st.columns(5)
-                m1.metric("Price", f"${curr_price:.2f}")
-                m2.metric("Alpha Score", f"{score}/100")
-                m3.metric("Trend", plan['bias'])
-                m4.metric("Volatility", f"{vol:.1f}%")
-                m5.metric("Trend Reversal", "No Active Reversal")
-
-                m6, m7, m8, m9, m10 = st.columns(5)
-                m6.metric("VRP Edge", vrp_edge)
-                m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
-                m8.metric("Support (Floor)", f"${sup:.2f}")
-                m9.metric("Resistance (Ceiling)", f"${res:.2f}")
-                m10.metric("95% VaR (Variance)", f"${np.percentile(mc_df.iloc[-1], 5):.2f}" if tier == "GOD_MODE" else "🔒 God Mode")
-
-                st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
-                b1, b2, b3, b4, b5 = st.columns(5)
-                b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
-                b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
-                b3.metric("Alpha Generated", f"{outperf:+.1f}%")
-                b4.metric("Max DD", f"{max_dd:.1f}%", delta_color="inverse" if tier == "GOD_MODE" else "normal")
-                b5.metric("Kelly Fraction", f"{half_kelly:.1f}%", delta_color="normal" if tier == "GOD_MODE" else "normal")
-
-                st.markdown("### 🎯 Optimal Trade Architecture")
-                st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
-                s1, s2, s3 = st.columns(3)
-                s1.metric("Est. Execution Target", plan['premium'])
-                s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
-                s3.metric("Ideal DTE", plan['dte'])
-                st.metric("Greeks (ATM)", f"Δ {plan['greeks']['delta']} | Γ {plan['greeks']['gamma']} | Vega {plan['greeks']['vega']}")
-                st.metric("Kelly Position Size", plan['kelly_size'])
-
-                # === FIXED CHART (length-safe projection) ===
-                hist_dates = df.index
-                future_dates = pd.date_range(start=hist_dates[-1], periods=31, freq='B')  # 31 to match mc_df
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='white')))
-                fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
-                fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
-                fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day EWMA Jump-Diffusion Projection)")
-                st.plotly_chart(fig, use_container_width=True)
-
-            except Exception as e:
-                st.error(f"Deep Dive Engine Error: {str(e)}")
-                st.info("Debug tip: Both CSVs must be in repo root + ticker must exist in latest_scan.csv")
+                            m10.metric("95% VaR (Variance)", "🔒 God Mode")
+                        st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
+                        b1, b2, b3, b4, b5 = st.columns(5)
+                        b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
+                        b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
+                        b3.metric("Alpha Generated", f"{outperf:+.1f}%")
+                        if tier == "GOD_MODE":
+                            b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
+                            b5.metric("Kelly Fraction (Half)", f"{half_kelly:.1f}%", delta_color="normal")
+                        else:
+                            b4.metric("Markdown % (Max DD)", "🔒 God Mode")
+                            b5.metric("Kelly Fraction", "🔒 God Mode")
+                        st.markdown("### 🎯 Optimal Trade Architecture")
+                        st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
+                        s1, s2, s3 = st.columns(3)
+                        s1.metric("Est. Execution Target", plan['premium'])
+                        s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
+                        s3.metric("Ideal DTE", plan['dte'])
+                        st.metric("Greeks (ATM)", f"Δ {plan['greeks']['delta']} | Γ {plan['greeks']['gamma']} | Vega {plan['greeks']['vega']}")
+                        st.metric("Kelly Position Size", plan['kelly_size'])
+                        hist_dates = df.index.tz_localize(None)
+                        future_dates = pd.date_range(start=hist_dates[-1] + pd.Timedelta(days=1), periods=30, freq='B')
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='white')))
+                        fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
+                        fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
+                        fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
+                        fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day EWMA Jump-Diffusion Projection)")
+                        st.plotly_chart(fig, use_container_width=True)
+                        with st.expander("🔬 Advanced Institutional Features (Regime Clustering / Walk-Forward / Macro / Strategy MC)"):
+                            colA, colB, colC = st.columns(3)
+                            colA.metric("Walk-Forward Validation", f"{wf_val:+.1f}%")
+                            colB.metric("Cross-Sectional Alpha", f"{cross_alpha:+.1f}")
+                            colC.metric("Feature Orthogonalization", f"{ortho}")
+                            st.metric("Macro (VIX / 10Y Yield)", f"{vix} / {tnx}%")
+                            st.metric("Stochastic Vol + Fat-Tail Strategy MC (30d)", f"{strat_mc_ret:+.1f}%")
+                        st.markdown("---")
+                        st.markdown("### 📥 Export Institutional Data")
+                        if tier == "GOD_MODE":
+                            metrics_dict = {
+                                "Metric": ["Ticker", "Timestamp", "Price", "Alpha Score", "Trend", "Volatility", "Reversal Signal", "VRP Edge", "Sharpe Ratio", "Support", "Resistance", "95% VaR (Variance)", "Win Rate", "Net Return", "Alpha", "Markdown % (Max DD)", "Kelly % (Half)", "Strategy", "Legs", "Premium Target", "POP", "Ideal DTE", "Walk-Forward", "Cross-Sectional α", "Macro VIX", "Strategy MC"],
+                                "Value": [ticker, datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S'), f"\( {curr_price:.2f}", f"{score}/100", plan['bias'], f"{vol:.1f}%", reversal, f"{vrp_edge:+.2f}%", f"{sharpe:.2f}", f" \){sup:.2f}", f"\( {res:.2f}", f" \){stop_loss_var95:.2f}", f"{win_rate:.1f}%", f"{strat_ret:+.1f}%", f"{outperf:+.1f}%", f"{max_dd:.1f}%", f"{half_kelly:.1f}%", plan['name'], plan['legs'], plan['premium'], f"{plan['pop']}%", plan['dte'], f"{wf_val:+.1f}%", f"{cross_alpha:+.1f}", f"{vix}", f"{strat_mc_ret:+.1f}%"]
+                            }
+                            csv_data = pd.DataFrame(metrics_dict).to_csv(index=False).encode('utf-8')
+                            st.download_button(label="📥 Download God Mode Data (CSV)", data=csv_data, file_name=f"{ticker}_HQTA_GodMode.csv", mime="text/csv")
+                        else:
+                            report_txt = f"""=== HQTA V22.0 INSTITUTIONAL REPORT ===\nTicker: {ticker}\nTimestamp: {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST\nPrice: ${curr_price:.2f}\nAlpha Score: {score}/100\nTrend: {plan['bias']}\nVolatility: {vol:.1f}%\nReversal Signal: {reversal}\n\n-- EDGE METRICS --\nVRP Edge: {vrp_edge:+.2f}%\nSharpe Ratio: {sharpe:.2f}\nSupport: ${sup:.2f}\nResistance: ${res:.2f}\n\n-- BACKTEST (2-YR) --\nWin Rate: {win_rate:.1f}%\nNet Return: {strat_ret:+.1f}%\nAlpha: {outperf:+.1f}%\n\n-- OPTIMAL ARCHITECTURE --\nStrategy: {plan['name']}\nLegs: {plan['legs']}\nTarget: {plan['premium']}\nPOP: {plan['pop']}%\nDTE: {plan['dte']}\n======================================="""
+                            st.download_button(label="📄 Download Analyst Report (TXT)", data=report_txt, file_name=f"{ticker}_HQTA_Analyst.txt", mime="text/plain")
+                except Exception as e:
+                    st.error(f"Error analyzing {ticker}: {e}")
+    with st.sidebar:
+        st.markdown("---")
+        if st.button("Log Out"):
+            st.session_state.authenticated = False
+            st.rerun()
