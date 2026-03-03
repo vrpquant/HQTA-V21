@@ -344,7 +344,17 @@ if check_login():
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
-          mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
+         if check_login():
+    tier = st.session_state.tier
+    with st.sidebar:
+        st.markdown("# 🏦 VRP Quant V22.1")
+        if tier == "GOD_MODE": 
+            st.success("🔓 GOD MODE ACTIVE")
+        else: 
+            st.warning("🔒 ANALYST TIER")
+        st.markdown("---")
+        
+    mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
@@ -361,7 +371,8 @@ if check_login():
             if sector_choice == "✨ Custom Watchlist":
                 with col2:
                     custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
-                    if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
+                    if custom_input: 
+                        selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             else: 
                 selected_tickers = TICKER_SETS[sector_choice]
             
@@ -376,101 +387,96 @@ if check_login():
                             else:
                                 st.warning("No data found for this sector in the latest pipeline run.")
                         else:
-                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found.")
+                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local .bat engine first.")
                     except Exception as e:
                         st.error(f"Error loading dashboard: {e}")
 
     elif mode == "🔬 Deep Dive Analysis":
-        st.title("🔬 Deep Dive & Trade Architect")
+        st.title("🔬 Deep Dive & Trade Architect V22.2")
         st.caption(f"⏱️ **Data Vault Timestamp:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
         ticker = st.text_input("Asset Ticker", "TSLA").upper().strip()
         
         if st.button("Run Analysis"):
             with st.spinner("Extracting from Institutional Vaults..."):
                 try:
-                    if not (os.path.exists("historical_vault.csv") and os.path.exists("latest_scan.csv")):
-                        st.error("⚠️ Missing CSVs in repo root.")
-                        st.stop()
-
-                    hist_df = pd.read_csv("historical_vault.csv")
-                    scan_df = pd.read_csv("latest_scan.csv")
-
-                    hist_df['Ticker'] = hist_df['Ticker'].astype(str).str.strip()
-                    scan_df['Ticker'] = scan_df['Ticker'].astype(str).str.strip()
-
-                    df = hist_df[hist_df['Ticker'] == ticker].copy()
-                    ticker_stats = scan_df[scan_df['Ticker'] == ticker]
-
-                    if ticker_stats.empty or df.empty:
-                        st.error(f"⚠️ {ticker} data not found in vault.")
-                        st.stop()
-
-                    stats = ticker_stats.iloc[0]
-
-                    curr_price = float(stats['Price'])
-                    score = int(stats['Alpha Score'])
-                    vol = pd.to_numeric(str(stats['Vol']).replace('%', '').strip(), errors='coerce') or 25.0
-                    sup = float(stats['Support'])
-                    res = float(stats['Resistance'])
-                    vrp_edge = str(stats['VRP Edge'])
-                    win_rate = pd.to_numeric(str(stats['Win Rate']).replace('%', '').strip(), errors='coerce') or 50.0
-                    max_dd = pd.to_numeric(str(stats['Max DD']).replace('%', '').strip(), errors='coerce') or -30.0
-                    half_kelly = pd.to_numeric(str(stats['Kelly']).replace('%', '').strip(), errors='coerce') or 20.0
-
-                    df['Date'] = pd.to_datetime(df['Date'].astype(str).str.replace(r'[-+]\d{2}:\d{2}', '', regex=True), errors='coerce')
-                    df = df.dropna(subset=['Date']).sort_values('Date').set_index('Date')
-
-                    sharpe = QuantLogic.calculate_sharpe(df)
-                    _, strat_ret, outperf, _, _ = BacktestEngine.run_quick_backtest(df)
-                    plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
-
-                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
-
-                    # UI Rendering (clean)
-                    st.markdown("### 📊 Market Variables")
-                    m1, m2, m3, m4, m5 = st.columns(5)
-                    m1.metric("Price", f"${curr_price:.2f}")
-                    m2.metric("Alpha Score", f"{score}/100")
-                    m3.metric("Trend", plan['bias'])
-                    m4.metric("Volatility", f"{vol:.1f}%")
-                    m5.metric("Trend Reversal", "No Active Reversal")
-
-                    m6, m7, m8, m9, m10 = st.columns(5)
-                    m6.metric("VRP Edge", vrp_edge)
-                    m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
-                    m8.metric("Support (Floor)", f"${sup:.2f}")
-                    m9.metric("Resistance (Ceiling)", f"${res:.2f}")
-                    m10.metric("95% VaR (Variance)", f"${np.percentile(mc_df.iloc[-1], 5):.2f}" if tier == "GOD_MODE" else "🔒 God Mode")
-
-                    st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
-                    b1, b2, b3, b4, b5 = st.columns(5)
-                    b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
-                    b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
-                    b3.metric("Alpha Generated", f"{outperf:+.1f}%")
-                    b4.metric("Max DD", f"{max_dd:.1f}%", delta_color="inverse" if tier == "GOD_MODE" else "normal")
-                    b5.metric("Kelly Fraction", f"{half_kelly:.1f}%", delta_color="normal" if tier == "GOD_MODE" else "normal")
-
-                    st.markdown("### 🎯 Optimal Trade Architecture")
-                    st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
-                    s1, s2, s3 = st.columns(3)
-                    s1.metric("Est. Execution Target", plan['premium'])
-                    s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
-                    s3.metric("Ideal DTE", plan['dte'])
-                    st.metric("Greeks (ATM)", f"Δ {plan['greeks']['delta']} | Γ {plan['greeks']['gamma']} | Vega {plan['greeks']['vega']}")
-                    st.metric("Kelly Position Size", plan['kelly_size'])
-
-                    hist_dates = df.index
-                    future_dates = pd.date_range(start=hist_dates[-1], periods=31, freq='B')
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='white')))
-                    fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
-                    fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
-                    fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
-                    st.plotly_chart(fig, use_container_width=True)
-
+                    if os.path.exists("historical_vault.csv") and os.path.exists("latest_scan.csv"):
+                        hist_df = pd.read_csv("historical_vault.csv")
+                        scan_df = pd.read_csv("latest_scan.csv")
+                        
+                        hist_df['Ticker'] = hist_df['Ticker'].astype(str).str.strip()
+                        scan_df['Ticker'] = scan_df['Ticker'].astype(str).str.strip()
+                        
+                        df = hist_df[hist_df['Ticker'] == ticker].copy()
+                        ticker_stats = scan_df[scan_df['Ticker'] == ticker]
+                        
+                        if not df.empty and not ticker_stats.empty:
+                            # Titanium Date Fix
+                            df['Date'] = pd.to_datetime(df['Date'], errors='coerce', utc=True).dt.tz_convert(None)
+                            df = df.dropna(subset=['Date'])
+                            df.set_index('Date', inplace=True)
+                            df.sort_index(inplace=True)
+                            
+                            stats = ticker_stats.iloc[0]
+                            curr_price = float(stats['Price'])
+                            score = int(stats['Alpha Score'])
+                            vol = float(str(stats['Vol']).replace('%', '').strip())
+                            sup = float(stats['Support'])
+                            res = float(stats['Resistance'])
+                            vrp_edge = str(stats['VRP Edge'])
+                            win_rate = float(str(stats['Win Rate']).replace('%', '').strip())
+                            max_dd = float(str(stats['Max DD']).replace('%', '').strip())
+                            half_kelly = float(str(stats['Kelly']).replace('%', '').strip())
+                            
+                            sharpe = QuantLogic.calculate_sharpe(df)
+                            reversal = "No Active Reversal"
+                            _, strat_ret, outperf, _, _ = BacktestEngine.run_quick_backtest(df)
+                            wf_val = BacktestEngine.walk_forward_validation(df)
+                            plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
+                            
+                            mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
+                            stop_loss_var95 = np.percentile(mc_df.iloc[-1], 5)
+                            
+                            st.markdown("### 📊 Market Variables")
+                            m1, m2, m3, m4, m5 = st.columns(5)
+                            m1.metric("Price", f"${curr_price:.2f}")
+                            m2.metric("Alpha Score", f"{score}/100")
+                            m3.metric("Trend", plan['bias'])
+                            m4.metric("Volatility", f"{vol:.1f}%")
+                            m5.metric("Trend Reversal", reversal)
+                            
+                            m6, m7, m8, m9, m10 = st.columns(5)
+                            m6.metric("VRP Edge", vrp_edge)
+                            m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                            m8.metric("Support (Floor)", f"${sup:.2f}")
+                            m9.metric("Resistance (Ceiling)", f"${res:.2f}")
+                            if tier == "GOD_MODE":
+                                m10.metric("95% VaR (Variance)", f"${stop_loss_var95:.2f}")
+                            else:
+                                m10.metric("95% VaR (Variance)", "🔒 God Mode")
+                                
+                            st.markdown("### 🎯 Optimal Trade Architecture")
+                            st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
+                            s1, s2, s3 = st.columns(3)
+                            s1.metric("Est. Execution Target", plan['premium'])
+                            s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
+                            s3.metric("Ideal DTE", plan['dte'])
+                            
+                            hist_dates = df.index
+                            future_dates = pd.date_range(start=hist_dates[-1] + pd.Timedelta(days=1), periods=30, freq='B')
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='white')))
+                            fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
+                            fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
+                            fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
+                            fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + Projection)")
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                        else:
+                            st.error(f"⚠️ {ticker} not found in the Data Vault. Did you scan it this morning?")
+                    else:
+                        st.error("⚠️ Pipeline link severed: CSV files not found. Upload them to GitHub.")
                 except Exception as e:
-                    st.error(f"Deep Dive Engine Error: {str(e)}")
+                    st.error(f"Error analyzing {ticker}: {e}")
 
     with st.sidebar:
         st.markdown("---")
