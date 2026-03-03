@@ -6,6 +6,25 @@ import plotly.graph_objects as go
 from scipy.stats import norm, t
 from datetime import datetime
 import pytz
+import os
+
+# ==========================================
+# --- GLOBAL INSTITUTIONAL UNIVERSE ---
+# ==========================================
+# Moved to global scope so your local .bat engine can import it
+TICKER_SETS = {
+    "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
+    "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
+    "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"],
+    "🏥 Healthcare & Biotech": ["XLV", "JNJ", "UNH", "LLY", "ABBV", "PFE", "MRK"],
+    "🏦 Financials & Banking": ["XLF", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA"],
+    "🏭 Industrials & Defense": ["XLI", "BA", "LMT", "RTX", "CAT", "GE", "HON"],
+    "🛒 Consumer Discretionary": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"],
+    "🧼 Consumer Staples": ["XLP", "PG", "KO", "PEP", "WMT", "COST"],
+    "🏠 Real Estate (REITs)": ["XLRE", "AMT", "PLD", "CCI", "EQIX", "PSA"],
+    "🔌 Utilities": ["XLU", "NEE", "DUK", "SO", "SRE", "AEP"],
+    "📡 Telecommunications": ["XLC", "VZ", "T", "CMCSA", "CHTR", "TMUS"]
+}
 
 # ==========================================
 # --- ADVANCED INSTITUTIONAL MATH ENGINE ---
@@ -274,23 +293,20 @@ class MarketScanner:
                         "Kelly": f"{kelly}%", "Strategy": plan['name']
                     })
             except Exception as e:
-                # This will print the exact reason for the failure in your Streamlit Cloud logs
-                print(f"⚠️ [ENGINE WARNING] Data pull failed for {t}: {e}") 
+                print(f"⚠️ [ENGINE WARNING] Data pull failed for {t}: {e}")
                 pass
-                
-        # THE FIX: Check if the results are empty before trying to sort them
+        
         df_results = pd.DataFrame(results)
         if df_results.empty:
-            st.warning("⚠️ Institutional Data Feed temporarily unavailable. The server is being rate-limited. Please try again in a few minutes.")
             return df_results
             
         return df_results.sort_values("Alpha Score", ascending=False)
 
 # ==========================================
-# --- STREAMLIT APP (100% unchanged UI) ---
+# --- STREAMLIT APP UI ---
 # ==========================================
 
-st.set_page_config(page_title="VRP Quant | V22", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V22.1", layout="wide", page_icon="🏦")
 est_tz = pytz.timezone('US/Eastern')
 
 try:
@@ -327,10 +343,10 @@ def check_login():
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
-            st.link_button("Subscribe via PayPal ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
+            st.link_button("Subscribe ($149/mo)", "https://vrpquant.substack.com/subscribe", use_container_width=True)
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
-            st.link_button("Subscribe via PayPal ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
+            st.link_button("Subscribe ($499/mo)", "https://vrpquant.substack.com/subscribe", use_container_width=True)
         st.markdown("---")
         st.success("🛡️ SEC Compliance Check: System verified.")
         st.caption(DISCLAIMER_TEXT)
@@ -340,7 +356,7 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V22.0")
+        st.markdown("# 🏦 VRP Quant V22.1")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
@@ -348,20 +364,8 @@ if check_login():
 
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
-        st.caption(f"⏱️ **Data Snapshot Generated:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
-        TICKER_SETS = {
-            "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
-            "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
-            "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"],
-            "🏥 Healthcare & Biotech": ["XLV", "JNJ", "UNH", "LLY", "ABBV", "PFE", "MRK"],
-            "🏦 Financials & Banking": ["XLF", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA"],
-            "🏭 Industrials & Defense": ["XLI", "BA", "LMT", "RTX", "CAT", "GE", "HON"],
-            "🛒 Consumer Discretionary": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"],
-            "🧼 Consumer Staples": ["XLP", "PG", "KO", "PEP", "WMT", "COST"],
-            "🏠 Real Estate (REITs)": ["XLRE", "AMT", "PLD", "CCI", "EQIX", "PSA"],
-            "🔌 Utilities": ["XLU", "NEE", "DUK", "SO", "SRE", "AEP"],
-            "📡 Telecommunications": ["XLC", "VZ", "T", "CMCSA", "CHTR", "TMUS"]
-        }
+        st.caption(f"⏱️ **Data Snapshot:** Displaying latest compiled quantitative run.")
+        
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
         else:
@@ -375,10 +379,22 @@ if check_login():
                     custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             else: selected_tickers = TICKER_SETS[sector_choice]
-            if st.button("🔄 Run Live Scan") and selected_tickers:
-                with st.spinner("Scanning..."):
-                    df_scan = MarketScanner.run_scan(selected_tickers)
-                    if not df_scan.empty: st.dataframe(df_scan, use_container_width=True)
+            
+            if st.button("🔄 Load Institutional Scan") and selected_tickers:
+                with st.spinner("Decrypting quantitative pipeline..."):
+                    try:
+                        # The Pipeline Hack: Reads local CSV instead of crashing via Yahoo
+                        if os.path.exists("latest_scan.csv"):
+                            df_scan = pd.read_csv("latest_scan.csv")
+                            filtered_df = df_scan[df_scan['Ticker'].isin(selected_tickers)]
+                            if not filtered_df.empty: 
+                                st.dataframe(filtered_df, use_container_width=True)
+                            else:
+                                st.warning("No data found for this sector in the latest pipeline run.")
+                        else:
+                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local .bat engine first.")
+                    except Exception as e:
+                        st.error(f"Error loading dashboard: {e}")
 
     elif mode == "🔬 Deep Dive Analysis":
         st.title("🔬 Deep Dive & Trade Architect")
@@ -468,7 +484,7 @@ if check_login():
                             csv_data = pd.DataFrame(metrics_dict).to_csv(index=False).encode('utf-8')
                             st.download_button(label="📥 Download God Mode Data (CSV)", data=csv_data, file_name=f"{ticker}_HQTA_GodMode.csv", mime="text/csv")
                         else:
-                            report_txt = f"""=== HQTA V22.0 INSTITUTIONAL REPORT ===\nTicker: {ticker}\nTimestamp: {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST\nPrice: ${curr_price:.2f}\nAlpha Score: {score}/100\nTrend: {plan['bias']}\nVolatility: {vol:.1f}%\nReversal Signal: {reversal}\n\n-- EDGE METRICS --\nVRP Edge: {vrp_edge:+.2f}%\nSharpe Ratio: {sharpe:.2f}\nSupport: ${sup:.2f}\nResistance: ${res:.2f}\n\n-- BACKTEST (2-YR) --\nWin Rate: {win_rate:.1f}%\nNet Return: {strat_ret:+.1f}%\nAlpha: {outperf:+.1f}%\n\n-- OPTIMAL ARCHITECTURE --\nStrategy: {plan['name']}\nLegs: {plan['legs']}\nTarget: {plan['premium']}\nPOP: {plan['pop']}%\nDTE: {plan['dte']}\n======================================="""
+                            report_txt = f"""=== HQTA V22.1 INSTITUTIONAL REPORT ===\nTicker: {ticker}\nTimestamp: {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST\nPrice: ${curr_price:.2f}\nAlpha Score: {score}/100\nTrend: {plan['bias']}\nVolatility: {vol:.1f}%\nReversal Signal: {reversal}\n\n-- EDGE METRICS --\nVRP Edge: {vrp_edge:+.2f}%\nSharpe Ratio: {sharpe:.2f}\nSupport: ${sup:.2f}\nResistance: ${res:.2f}\n\n-- BACKTEST (2-YR) --\nWin Rate: {win_rate:.1f}%\nNet Return: {strat_ret:+.1f}%\nAlpha: {outperf:+.1f}%\n\n-- OPTIMAL ARCHITECTURE --\nStrategy: {plan['name']}\nLegs: {plan['legs']}\nTarget: {plan['premium']}\nPOP: {plan['pop']}%\nDTE: {plan['dte']}\n======================================="""
                             st.download_button(label="📄 Download Analyst Report (TXT)", data=report_txt, file_name=f"{ticker}_HQTA_Analyst.txt", mime="text/plain")
                 except Exception as e:
                     st.error(f"Error analyzing {ticker}: {e}")
