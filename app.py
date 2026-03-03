@@ -344,7 +344,7 @@ if check_login():
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
-       mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
+          mode = st.sidebar.radio("Module", ["🚀 Market Scanner", "🔬 Deep Dive Analysis"])
 
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
@@ -362,7 +362,8 @@ if check_login():
                 with col2:
                     custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
-            else: selected_tickers = TICKER_SETS[sector_choice]
+            else: 
+                selected_tickers = TICKER_SETS[sector_choice]
             
             if st.button("🔄 Load Institutional Scan") and selected_tickers:
                 with st.spinner("Decrypting quantitative pipeline..."):
@@ -375,7 +376,7 @@ if check_login():
                             else:
                                 st.warning("No data found for this sector in the latest pipeline run.")
                         else:
-                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local .bat engine first.")
+                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found.")
                     except Exception as e:
                         st.error(f"Error loading dashboard: {e}")
 
@@ -388,7 +389,7 @@ if check_login():
             with st.spinner("Extracting from Institutional Vaults..."):
                 try:
                     if not (os.path.exists("historical_vault.csv") and os.path.exists("latest_scan.csv")):
-                        st.error("⚠️ Missing CSVs in repo root. Re-upload latest_scan.csv + historical_vault.csv.")
+                        st.error("⚠️ Missing CSVs in repo root.")
                         st.stop()
 
                     hist_df = pd.read_csv("historical_vault.csv")
@@ -400,32 +401,24 @@ if check_login():
                     df = hist_df[hist_df['Ticker'] == ticker].copy()
                     ticker_stats = scan_df[scan_df['Ticker'] == ticker]
 
-                    if ticker_stats.empty:
-                        st.error(f"⚠️ {ticker} NOT FOUND in latest_scan.csv.")
-                        st.stop()
-                    if df.empty:
-                        st.error(f"⚠️ No historical bars for {ticker}.")
+                    if ticker_stats.empty or df.empty:
+                        st.error(f"⚠️ {ticker} data not found in vault.")
                         st.stop()
 
                     stats = ticker_stats.iloc[0]
 
                     curr_price = float(stats['Price'])
                     score = int(stats['Alpha Score'])
-                    vol = pd.to_numeric(str(stats['Vol']).replace('%', '').strip(), errors='coerce')
-                    vol = vol if pd.notna(vol) else 25.0
+                    vol = pd.to_numeric(str(stats['Vol']).replace('%', '').strip(), errors='coerce') or 25.0
                     sup = float(stats['Support'])
                     res = float(stats['Resistance'])
                     vrp_edge = str(stats['VRP Edge'])
-                    win_rate = pd.to_numeric(str(stats['Win Rate']).replace('%', '').strip(), errors='coerce')
-                    win_rate = win_rate if pd.notna(win_rate) else 50.0
-                    max_dd = pd.to_numeric(str(stats['Max DD']).replace('%', '').strip(), errors='coerce')
-                    max_dd = max_dd if pd.notna(max_dd) else -30.0
-                    half_kelly = pd.to_numeric(str(stats['Kelly']).replace('%', '').strip(), errors='coerce')
-                    half_kelly = half_kelly if pd.notna(half_kelly) else 20.0
+                    win_rate = pd.to_numeric(str(stats['Win Rate']).replace('%', '').strip(), errors='coerce') or 50.0
+                    max_dd = pd.to_numeric(str(stats['Max DD']).replace('%', '').strip(), errors='coerce') or -30.0
+                    half_kelly = pd.to_numeric(str(stats['Kelly']).replace('%', '').strip(), errors='coerce') or 20.0
 
                     df['Date'] = pd.to_datetime(df['Date'].astype(str).str.replace(r'[-+]\d{2}:\d{2}', '', regex=True), errors='coerce')
-                    df = df.dropna(subset=['Date']).sort_values('Date')
-                    df.set_index('Date', inplace=True)
+                    df = df.dropna(subset=['Date']).sort_values('Date').set_index('Date')
 
                     sharpe = QuantLogic.calculate_sharpe(df)
                     _, strat_ret, outperf, _, _ = BacktestEngine.run_quick_backtest(df)
@@ -433,6 +426,7 @@ if check_login():
 
                     mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
 
+                    # UI Rendering (clean)
                     st.markdown("### 📊 Market Variables")
                     m1, m2, m3, m4, m5 = st.columns(5)
                     m1.metric("Price", f"${curr_price:.2f}")
@@ -472,12 +466,11 @@ if check_login():
                     fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
                     fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
                     fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day EWMA Jump-Diffusion Projection)")
+                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day Projection)")
                     st.plotly_chart(fig, use_container_width=True)
 
                 except Exception as e:
                     st.error(f"Deep Dive Engine Error: {str(e)}")
-                    st.info("Debug tip: Both CSVs must be in repo root + ticker must exist in latest_scan.csv")
 
     with st.sidebar:
         st.markdown("---")
