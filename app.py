@@ -340,7 +340,7 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V22.0")
+        st.markdown("# 🏦 VRP Quant V22.1")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
