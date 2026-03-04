@@ -11,19 +11,43 @@ import time  # [ADDED] For institutional API throttling
 
 # ==========================================
 # --- GLOBAL INSTITUTIONAL UNIVERSE ---
+# Optimized for Maximum Liquidity & Options Open Interest (Top 10 per sector)
 # ==========================================
+
 TICKER_SETS = {
-    "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "BTC-USD", "ETH-USD", "COIN"],
-    "💻 Semiconductors (AI)": ["NVDA", "AMD", "AVGO", "TSM", "INTC", "QCOM", "MU", "SMH"],
-    "🛢️ Energy & Commodities": ["XLE", "USO", "GLD", "SLV", "CVX", "XOM"],
-    "🏥 Healthcare & Biotech": ["XLV", "JNJ", "UNH", "LLY", "ABBV", "PFE", "MRK"],
-    "🏦 Financials & Banking": ["XLF", "JPM", "BAC", "WFC", "GS", "MS", "V", "MA"],
-    "🏭 Industrials & Defense": ["XLI", "BA", "LMT", "RTX", "CAT", "GE", "HON"],
-    "🛒 Consumer Discretionary": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"],
-    "🧼 Consumer Staples": ["XLP", "PG", "KO", "PEP", "WMT", "COST"],
-    "🏠 Real Estate (REITs)": ["XLRE", "AMT", "PLD", "CCI", "EQIX", "PSA"],
-    "🔌 Utilities": ["XLU", "NEE", "DUK", "SO", "SRE", "AEP"],
-    "📡 Telecommunications": ["XLC", "VZ", "T", "CMCSA", "CHTR", "TMUS"]
+    "🔥 Magnificent 7 + Crypto Proxies": [
+        "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA"
+    ],
+    "💻 Semiconductors (AI)": [
+        "NVDA", "AMD", "TSM", "INTC", "MU", "AVGO", "QCOM", "ARM", "AMAT", "SMH"
+    ],
+    "🛢️ Energy & Commodities": [
+        "XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "XLE"
+    ],
+    "🏥 Healthcare & Biotech": [
+        "LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "XLV"
+    ],
+    "🏦 Financials & Banking": [
+        "JPM", "BAC", "WFC", "MS", "GS", "C", "V", "MA", "AXP", "XLF"
+    ],
+    "🏭 Industrials & Defense": [
+        "GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "XLI"
+    ],
+    "🛒 Consumer Discretionary": [
+        "TSLA", "AMZN", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "XLY"
+    ],
+    "🧼 Consumer Staples": [
+        "WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "XLP"
+    ],
+    "🏠 Real Estate (REITs)": [
+        "AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "XLRE"
+    ],
+    "🔌 Utilities": [
+        "NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "XLU"
+    ],
+    "📡 Communications & Media": [
+        "META", "GOOGL", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "XLC"
+    ]
 }
 
 # ==========================================
