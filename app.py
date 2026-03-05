@@ -3,51 +3,101 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from scipy.stats import norm, t
+from scipy.stats import norm
 from datetime import datetime
 import pytz
 import os
-import time  # [ADDED] For institutional API throttling
+import time
+
+# ==========================================
+# --- INSTITUTIONAL UI THEME INJECTION ---
+# ==========================================
+def inject_institutional_css():
+    st.markdown("""
+    <style>
+        /* Main Backgrounds */
+        .stApp {
+            background-color: #0B0F19;
+            color: #F8FAFC;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #0F172A;
+            border-right: 1px solid #1E293B;
+        }
+        
+        /* Metric Cards */
+        div[data-testid="metric-container"] {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        div[data-testid="metric-container"] label {
+            color: #94A3B8 !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.5px;
+        }
+        div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+            color: #38BDF8 !important;
+            font-size: 1.8rem !important;
+            font-weight: 700 !important;
+        }
+        
+        /* The Awesome Spot / Apex Box */
+        .apex-box {
+            background-color: #082F49;
+            border-left: 5px solid #38BDF8;
+            border-radius: 5px;
+            padding: 20px;
+            margin-top: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .apex-title {
+            color: #BAE6FD;
+            font-size: 1.4em;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+        .apex-action {
+            color: #38BDF8;
+            font-size: 1.2em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .apex-logic {
+            color: #94A3B8;
+            font-size: 1em;
+            font-style: italic;
+        }
+        
+        /* Headers and Dividers */
+        h1, h2, h3 {
+            color: #F1F5F9 !important;
+            font-weight: 700 !important;
+        }
+        hr {
+            border-color: #334155 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # --- GLOBAL INSTITUTIONAL UNIVERSE ---
-# Optimized for Maximum Liquidity & Options Open Interest (Top 10 per sector)
 # ==========================================
-
 TICKER_SETS = {
-    "🔥 Magnificent 7 + Crypto": [
-        "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA", "BTC-USD"
-    ],
-    "💻 Semiconductors (AI)": [
-        "NVDA", "AMD", "TSM", "INTC", "MU", "AVGO", "QCOM", "ARM", "AMAT", "SMH"
-    ],
-    "🛢️ Energy & Commodities": [
-        "XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "XLE"
-    ],
-    "🏥 Healthcare & Biotech": [
-        "LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "XLV"
-    ],
-    "🏦 Financials & Banking": [
-        "JPM", "BAC", "WFC", "MS", "GS", "C", "V", "MA", "AXP", "XLF"
-    ],
-    "🏭 Industrials & Defense": [
-        "GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "XLI"
-    ],
-    "🛒 Consumer Discretionary": [
-        "TSLA", "AMZN", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "XLY"
-    ],
-    "🧼 Consumer Staples": [
-        "WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "XLP"
-    ],
-    "🏠 Real Estate (REITs)": [
-        "AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "XLRE"
-    ],
-    "🔌 Utilities": [
-        "NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "XLU"
-    ],
-    "📡 Communications & Media": [
-        "META", "GOOGL", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "XLC"
-    ]
+    "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA", "BTC-USD"],
+    "💻 Semiconductors (AI)": ["NVDA", "AMD", "TSM", "INTC", "MU", "AVGO", "QCOM", "ARM", "AMAT", "SMH"],
+    "🛢️ Energy & Commodities": ["XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "XLE"],
+    "🏥 Healthcare & Biotech": ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "XLV"],
+    "🏦 Financials & Banking": ["JPM", "BAC", "WFC", "MS", "GS", "C", "V", "MA", "AXP", "XLF"],
+    "🏭 Industrials & Defense": ["GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "XLI"],
+    "🛒 Consumer Discretionary": ["TSLA", "AMZN", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "XLY"],
+    "🧼 Consumer Staples": ["WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "XLP"],
+    "🏠 Real Estate (REITs)": ["AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "XLRE"],
+    "🔌 Utilities": ["NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "XLU"],
+    "📡 Communications & Media": ["META", "GOOGL", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "XLC"]
 }
 
 # ==========================================
@@ -130,11 +180,6 @@ class QuantLogic:
 
     @staticmethod
     def calculate_vrp_edge(ticker, df, mode="scanner"):
-        """
-        [PATCHED] Dual-mode VRP calculation to prevent YFinance IP Bans.
-        mode='scanner': Uses lightweight historical proxy
-        mode='deep_dive': Pulls live option chains for true IV
-        """
         if mode == "scanner":
             hv20 = df['Close'].pct_change().tail(20).std() * np.sqrt(252) * 100
             hv60 = df['Close'].pct_change().tail(60).std() * np.sqrt(252) * 100
@@ -144,6 +189,31 @@ class QuantLogic:
             hv = QuantLogic.calculate_vol(df)
             iv = QuantLogic.get_atm_iv(ticker, price)
             return round(iv - hv, 2) if iv else 0.0
+
+    @staticmethod
+    def detect_reversal(df):
+        """Scans for structural momentum shifts and exhaustion points."""
+        try:
+            if len(df) < 201: return "Insufficient Data"
+            sma50 = df['Close'].rolling(50).mean()
+            sma200 = df['Close'].rolling(200).mean()
+            if sma50.iloc[-2] < sma200.iloc[-2] and sma50.iloc[-1] >= sma200.iloc[-1]:
+                return "Golden Cross (Bull)"
+            elif sma50.iloc[-2] > sma200.iloc[-2] and sma50.iloc[-1] <= sma200.iloc[-1]:
+                return "Death Cross (Bear)"
+                
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain / (loss + 1e-9)
+            rsi = 100 - (100 / (1 + rs))
+            if rsi.iloc[-2] < 30 and rsi.iloc[-1] >= 30:
+                return "RSI Bull Bounce"
+            elif rsi.iloc[-2] > 70 and rsi.iloc[-1] <= 70:
+                return "RSI Bear Rejection"
+            return "None Active"
+        except:
+            return "None Active"
 
     @staticmethod
     def calculate_sharpe(df, risk_free_rate=0.04):
@@ -241,6 +311,34 @@ class TradeArchitect:
         plan['bias'] = bias
         return plan
 
+    @staticmethod
+    def generate_hybrid_plan(price, score, vrp, sup, res):
+        hybrid = {}
+        if score >= 60:
+            if vrp > 0:
+                hybrid['name'] = "The Institutional Buy-Write (Yield Harvest)"
+                hybrid['action'] = f"Buy 100 Shares @ Market AND Sell 1 Call Option @ ${res:.2f} Strike."
+                hybrid['logic'] = "Trend is strong, but options are expensive. We buy the stock and sell overpriced calls to institutions to lower our risk."
+            else:
+                hybrid['name'] = "The Bulletproof Bull (Protected Upside)"
+                hybrid['action'] = f"Buy 100 Shares @ Market AND Buy 1 Put Option @ ${sup:.2f} Strike."
+                hybrid['logic'] = "Trend is strong and options are cheap. We ride the stock up, but buy cheap insurance at Support to make this mathematically low-stress."
+        elif score <= 40:
+            if vrp > 0:
+                hybrid['name'] = "The Warren Buffett Entry (Discount Acquisition)"
+                hybrid['action'] = f"Hold Cash AND Sell 1 Cash-Secured Put @ ${sup:.2f} Strike."
+                hybrid['logic'] = "Momentum is weak and fear is high. Do not buy the stock yet. Sell puts to get paid upfront while waiting to buy it at the Support floor."
+            else:
+                hybrid['name'] = "The Smart-Money Short (Risk-Defined Bear)"
+                hybrid['action'] = f"Do NOT Buy Stock. Buy 1 Put Option Vertical Spread targeting ${sup:.2f}."
+                hybrid['logic'] = "Momentum is broken and options are cheap. We use low-risk put options to profit from the drop without shorting shares."
+        else:
+            hybrid['name'] = "The Floor-to-Ceiling Swing (Mean Reversion)"
+            hybrid['action'] = f"Place Limit Buy Order for Shares @ ${sup:.2f} AND Set Sell Target @ ${res:.2f}."
+            hybrid['logic'] = "Stock is trapped in a channel. We refuse to buy at current prices. We set traps at the floor and sell at the ceiling."
+            
+        return hybrid
+
 class MonteCarloEngine:
     @staticmethod
     def simulate_paths(df, days=30, sims=1000):
@@ -275,26 +373,23 @@ class MarketScanner:
                     price = df['Close'].iloc[-1]
                     score = AlphaEngine.calculate_score(df)
                     vol = QuantLogic.calculate_vol(df)
-                    
-                    # [PATCHED] Use scanner mode to avoid heavy payload options pull
                     vrp = QuantLogic.calculate_vrp_edge(t, df, mode="scanner")
-                    
+                    reversal = QuantLogic.detect_reversal(df)
                     sup, res = QuantLogic.get_support_resistance(df)
                     win_rate, strat_ret, outperf, max_dd, kelly = BacktestEngine.run_quick_backtest(df)
                     plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
+                    hybrid = TradeArchitect.generate_hybrid_plan(price, score, vrp, sup, res)
                     
                     results.append({
                         "Ticker": t, "Price": round(price,2), "Alpha Score": score, "Trend": plan['bias'],
-                        "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%", "Support": round(sup,2),
-                        "Resistance": round(res,2), "Win Rate": f"{win_rate}%", "Max DD": f"{max_dd}%",
-                        "Kelly": f"{kelly}%", "Strategy": plan['name']
+                        "Reversal": reversal, "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%", 
+                        "Support": round(sup,2), "Resistance": round(res,2), 
+                        "HQTA Apex Action": hybrid['action'],
+                        "Strategy": plan['name'], "Kelly": f"{kelly}%"
                     })
                 
-                # [PATCHED] Throttling API calls to prevent YFinance 429 Ban
-                time.sleep(1.5)
-                
+                time.sleep(1.5) # INSTITUTIONAL THROTTLE - Keeps Yahoo Finance happy
             except Exception as e:
-                print(f"⚠️ [ENGINE WARNING] Data pull failed for {t}: {e}")
                 pass
         
         df_results = pd.DataFrame(results)
@@ -306,7 +401,8 @@ class MarketScanner:
 # --- STREAMLIT APP UI ---
 # ==========================================
 
-st.set_page_config(page_title="VRP Quant | V22.1", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V22.2 Institutional", layout="wide", page_icon="🏦")
+inject_institutional_css() # Execute CSS Injection
 est_tz = pytz.timezone('US/Eastern')
 
 try:
@@ -315,10 +411,11 @@ except Exception as e:
     st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please configure [credentials] in Streamlit Secrets.")
     st.stop()
 
-DISCLAIMER_TEXT = """**SEC MARKETING RULE (17 CFR § 275.206(4)-1) & REGULATORY COMPLIANCE NOTICE**
-1. **Hypothetical Performance:** Metrics generated by this software are hypothetical and not guarantees of future results.
-2. **Not Financial Advice:** VRP Quant provides quantitative data analysis for informational purposes only.
-3. **Risk Disclosure:** Options trading involves substantial risk of loss."""
+# ==========================================
+# --- PAYMENT GATEWAY LINKS ---
+# ==========================================
+PAYPAL_ANALYST_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA" 
+PAYPAL_GOD_MODE_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI"
 
 def check_login():
     if "authenticated" not in st.session_state:
@@ -339,24 +436,20 @@ def check_login():
                     st.error("Invalid Credentials")
         st.markdown("---")
         st.markdown("### 👑 Founding Member Cohort (Beta)")
-        st.caption("Institutional pricing is $299/mo (Analyst) and $999/mo (God Mode). Join the Private Beta today to lock in your lifetime discounted rate.")
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
-            st.link_button("Subscribe ($149/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA", use_container_width=True)
+            st.link_button("Subscribe securely via PayPal", PAYPAL_ANALYST_LINK, use_container_width=True)
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
-            st.link_button("Subscribe ($499/mo)", "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI", use_container_width=True)
-        st.markdown("---")
-        st.success("🛡️ SEC Compliance Check: System verified.")
-        st.caption(DISCLAIMER_TEXT)
+            st.link_button("Subscribe securely via PayPal", PAYPAL_GOD_MODE_LINK, use_container_width=True)
         return False
     return True
 
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V22.1 (Stable)")
+        st.markdown("# 🏦 VRP Quant V22.2")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
@@ -364,57 +457,74 @@ if check_login():
 
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
-        st.caption(f"⏱️ **Data Snapshot:** Displaying latest compiled quantitative run.")
         
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
         else:
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
-                sector_choice = st.selectbox("Select Sector:", options)
-            selected_tickers = []
-            if sector_choice == "✨ Custom Watchlist":
-                with col2:
-                    custom_input = st.text_area("Enter Tickers (comma separated):", "PLTR, SOFI")
-                    if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
-            else: selected_tickers = TICKER_SETS[sector_choice]
-            
-            # [OPTION 1] UI reads from CSV pipeline (V22.1 Default Decoupled Architecture)
-            if st.button("🔄 Load Offline Institutional Scan") and selected_tickers:
+            # 1. Primary Feature: Load Today's Dynamic Top 10 from the Backend Pipeline
+            st.markdown("### 🏆 Today's Apex Top 10 (Pipeline Output)")
+            if st.button("🔄 Load Offline Institutional Scan", use_container_width=True):
                 with st.spinner("Decrypting quantitative pipeline..."):
                     try:
                         if os.path.exists("latest_scan.csv"):
                             df_scan = pd.read_csv("latest_scan.csv")
-                            filtered_df = df_scan[df_scan['Ticker'].isin(selected_tickers)]
-                            if not filtered_df.empty: 
-                                st.dataframe(filtered_df, use_container_width=True)
-                            else:
-                                st.warning("No data found for this sector in the latest pipeline run.")
+                            # Apply Institutional DataFrame Styling
+                            styled_df = df_scan.style.set_properties(**{
+                                'background-color': '#1E293B',
+                                'color': '#F8FAFC',
+                                'border-color': '#334155'
+                            }).set_properties(subset=['HQTA Apex Action'], **{
+                                'background-color': '#0C4A6E',
+                                'color': '#38BDF8',
+                                'font-weight': 'bold'
+                            })
+                            st.dataframe(styled_df, use_container_width=True)
                         else:
                             st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local data_engine.py first.")
                     except Exception as e:
                         st.error(f"Error loading dashboard: {e}")
+
+            st.markdown("---")
             
-            # [OPTION 2] Live Fallback Scan (With Throttling built-in)
-            if st.button("⚡ Run Live Scan (Throttled Fallback)") and selected_tickers:
-                with st.spinner("Running Live Throttled Scan (Avoids IP Ban)..."):
+            # 2. Secondary Feature: Custom Live Scanning
+            st.markdown("### ⚡ Live Manual Scanner")
+            col1, col2 = st.columns([1, 2])
+            with col1:
+                options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
+                sector_choice = st.selectbox("Select Sector to Scan:", options)
+            selected_tickers = []
+            if sector_choice == "✨ Custom Watchlist":
+                with col2:
+                    custom_input = st.text_area("Enter Tickers:", "PLTR, SOFI")
+                    if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
+            else: selected_tickers = TICKER_SETS[sector_choice]
+            
+            if st.button("Run Live Sector Scan (Throttled)") and selected_tickers:
+                with st.spinner("Running Live Throttled Scan..."):
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
                         if not df_scan.empty:
-                            st.dataframe(df_scan, use_container_width=True)
+                            styled_df = df_scan.style.set_properties(**{
+                                'background-color': '#1E293B',
+                                'color': '#F8FAFC',
+                                'border-color': '#334155'
+                            }).set_properties(subset=['HQTA Apex Action'], **{
+                                'background-color': '#0C4A6E',
+                                'color': '#38BDF8',
+                                'font-weight': 'bold'
+                            })
+                            st.dataframe(styled_df, use_container_width=True)
                     except Exception as e:
-                        st.error(f"Live scan failed: {e}")
+                        st.error(f"Scan failed: {e}")
 
     elif mode == "🔬 Deep Dive Analysis":
         st.title("🔬 Deep Dive & Trade Architect")
-        st.caption(f"⏱️ **Data Vault Timestamp:** {datetime.now(est_tz).strftime('%Y-%m-%d %H:%M:%S')} EST")
         ticker = st.text_input("Asset Ticker", "TSLA").upper().strip()
         
         if st.button("Run Deep Dive Analysis"):
             with st.spinner("Extracting Advanced Institutional Metrics..."):
                 try:
-                    # Execute a direct pull for the single ticker (Safe for YFinance)
+                    # SURGICAL STRIKE: Single ping, no throttling needed.
                     stock = yf.Ticker(ticker)
                     df = stock.history(period="2y")
                     
@@ -425,68 +535,75 @@ if check_login():
                     curr_price = df['Close'].iloc[-1]
                     score = AlphaEngine.calculate_score(df)
                     vol = QuantLogic.calculate_vol(df)
-                    
-                    # [PATCHED] Use TRUE IV for single deep-dive (Heavier, but safe for 1 ticker)
                     vrp_edge_val = QuantLogic.calculate_vrp_edge(ticker, df, mode="deep_dive")
-                    vrp_edge_str = f"{vrp_edge_val:+.2f}%"
-                    
+                    reversal_signal = QuantLogic.detect_reversal(df)
                     sup, res = QuantLogic.get_support_resistance(df)
                     sharpe = QuantLogic.calculate_sharpe(df)
                     win_rate, strat_ret, outperf, max_dd, half_kelly = BacktestEngine.run_quick_backtest(df)
                     
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
-                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
+                    hybrid = TradeArchitect.generate_hybrid_plan(curr_price, score, vrp_edge_val, sup, res)
+                    
+                    # 10,000 MONTE CARLO SIMULATIONS FOR GOD MODE TIER
+                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=10000 if tier == "GOD_MODE" else 1000)
 
+                    # --- THE AWESOME SPOT UI BOX ---
+                    st.markdown(f"""
+                    <div class="apex-box">
+                        <div class="apex-title">🏆 THE AWESOME SPOT: {hybrid['name']}</div>
+                        <div class="apex-action">TRADE ARCHITECTURE: {hybrid['action']}</div>
+                        <div class="apex-logic">Institutional Logic: {hybrid['logic']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
                     st.markdown("### 📊 Market Variables")
-                    m1, m2, m3, m4, m5 = st.columns(5)
+                    m1, m2, m3, m4, m5, m6 = st.columns(6)
                     m1.metric("Price", f"${curr_price:.2f}")
                     m2.metric("Alpha Score", f"{score}/100")
                     m3.metric("Trend", plan['bias'])
                     m4.metric("Volatility", f"{vol:.1f}%")
-                    m5.metric("Trend Reversal", "Live Check Active")
-
-                    m6, m7, m8, m9, m10 = st.columns(5)
-                    m6.metric("True VRP Edge", vrp_edge_str)
-                    m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
-                    m8.metric("Support (Floor)", f"${sup:.2f}")
-                    m9.metric("Resistance (Ceiling)", f"${res:.2f}")
-                    m10.metric("95% VaR (Variance)", f"${np.percentile(mc_df.iloc[-1], 5):.2f}" if tier == "GOD_MODE" else "🔒 God Mode")
+                    m5.metric("True VRP Edge", f"{vrp_edge_val:+.2f}%")
+                    m6.metric("Trend Reversal", reversal_signal)
 
                     st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
                     b1, b2, b3, b4, b5 = st.columns(5)
                     b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
                     b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
                     b3.metric("Alpha Generated", f"{outperf:+.1f}%")
-                    b4.metric("Max DD", f"{max_dd:.1f}%", delta_color="inverse" if tier == "GOD_MODE" else "normal")
-                    b5.metric("Kelly Fraction", f"{half_kelly:.1f}%", delta_color="normal" if tier == "GOD_MODE" else "normal")
+                    b4.metric("Max DD", f"{max_dd:.1f}%", delta_color="inverse")
+                    b5.metric("Kelly Position Size", f"{half_kelly:.1f}%", delta_color="normal")
 
-                    st.markdown("### 🎯 Optimal Trade Architecture")
+                    st.markdown("### 🎯 Advanced Options Architecture (For Pros)")
                     st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
                     s1, s2, s3 = st.columns(3)
                     s1.metric("Est. Execution Target", plan['premium'])
                     s2.metric("Prob. of Profit (POP)", f"{plan['pop']}%")
                     s3.metric("Ideal DTE", plan['dte'])
-                    st.metric("Greeks (ATM)", f"Δ {plan['greeks']['delta']} | Γ {plan['greeks']['gamma']} | Vega {plan['greeks']['vega']}")
-                    st.metric("Kelly Position Size", plan['kelly_size'])
 
                     hist_dates = df.index.tz_localize(None) if df.index.tz else df.index
                     future_dates = pd.date_range(start=hist_dates[-1] + pd.Timedelta(days=1), periods=30, freq='B')
                     
                     fig = go.Figure()
-                    fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='white')))
-                    fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='orange')))
-                    fig.add_hline(y=sup, line_dash="dot", line_color="green", annotation_text="Support")
-                    fig.add_hline(y=res, line_dash="dot", line_color="red", annotation_text="Resistance")
-                    fig.update_layout(template="plotly_dark", height=500, title="Institutional Chart (History + 30-Day EWMA Jump-Diffusion Projection)")
+                    fig.add_trace(go.Scatter(x=hist_dates, y=df['Close'], name='History', line=dict(color='#F1F5F9')))
+                    fig.add_trace(go.Scatter(x=future_dates, y=mc_df.mean(axis=1), name='Mean Projection', line=dict(dash='dash', color='#38BDF8')))
+                    fig.add_hline(y=sup, line_dash="dot", line_color="#4ADE80", annotation_text="Support", annotation_font_color="#4ADE80")
+                    fig.add_hline(y=res, line_dash="dot", line_color="#F87171", annotation_text="Resistance", annotation_font_color="#F87171")
+                    
+                    fig.update_layout(
+                        template="plotly_dark", 
+                        height=500, 
+                        title=f"Institutional Chart (History + 30-Day Projection | {10000 if tier == 'GOD_MODE' else 1000} Simulations)",
+                        paper_bgcolor='#0B0F19',
+                        plot_bgcolor='#0F172A',
+                        font=dict(color='#F8FAFC')
+                    )
                     st.plotly_chart(fig, use_container_width=True)
 
                 except Exception as e:
                     st.error(f"Deep Dive Engine Error: {str(e)}")
-                    st.info("Check ticker symbol or API connection.")
 
     with st.sidebar:
         st.markdown("---")
         if st.button("Log Out"):
             st.session_state.authenticated = False
             st.rerun()
-
