@@ -605,12 +605,12 @@ if check_login():
             st.session_state.authenticated = False
             st.rerun()
 
-    # ==========================================
-    # --- SEC REGULATORY COMPLIANCE FOOTER ---
-    # ==========================================
-    st.markdown("<br><br><br><hr>", unsafe_allow_html=True)
-    st.markdown("""
-    <div style="font-size: 0.8em; color: #475569; line-height: 1.6; text-align: justify; padding-bottom: 20px;">
-    <b>SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated V22.2 Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.
-    </div>
-    """, unsafe_allow_html=True)
+# ==========================================
+# --- SEC REGULATORY COMPLIANCE FOOTER ---
+# ==========================================
+st.markdown("<br><br><br><hr>", unsafe_allow_html=True)
+st.markdown("""
+<div style="font-size: 0.8em; color: #475569; line-height: 1.6; text-align: justify; padding-bottom: 20px;">
+<b>SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated V22.2 Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.
+</div>
+""", unsafe_allow_html=True)
