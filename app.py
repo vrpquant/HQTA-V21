@@ -211,9 +211,9 @@ class QuantLogic:
                 return "RSI Bull Bounce"
             elif rsi.iloc[-2] > 70 and rsi.iloc[-1] <= 70:
                 return "RSI Bear Rejection"
-            return "None Active"
+            return "No Active Reversal"
         except:
-            return "None Active"
+            return "No Active Reversal"
 
     @staticmethod
     def calculate_sharpe(df, risk_free_rate=0.04):
@@ -227,6 +227,17 @@ class QuantLogic:
         res = df['High'].rolling(50).max().iloc[-1]
         sup = df['Low'].rolling(50).min().iloc[-1]
         return sup, res
+        
+    @staticmethod
+    def calculate_var(df, confidence=0.95):
+        """Calculates the 95% Historical Value at Risk (VaR) floor."""
+        try:
+            price = df['Close'].iloc[-1]
+            daily_returns = df['Close'].pct_change().dropna()
+            var_pct = np.percentile(daily_returns, (1 - confidence) * 100)
+            return round(price * (1 + var_pct), 2)
+        except:
+            return df['Close'].iloc[-1] * 0.95
 
     @staticmethod
     def calculate_greeks(S, K, T, r, sigma, option_type='call'):
@@ -516,6 +527,7 @@ if check_login():
                     reversal_signal = QuantLogic.detect_reversal(df)
                     sup, res = QuantLogic.get_support_resistance(df)
                     sharpe = QuantLogic.calculate_sharpe(df)
+                    var_95 = QuantLogic.calculate_var(df)
                     win_rate, strat_ret, outperf, max_dd, half_kelly = BacktestEngine.run_quick_backtest(df)
                     
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
@@ -533,22 +545,30 @@ if check_login():
                     </div>
                     """, unsafe_allow_html=True)
                     
+                    # Exact 10-Metric Layout match from user screenshot
                     st.markdown("### 📊 Market Variables")
-                    m1, m2, m3, m4, m5, m6 = st.columns(6)
+                    m1, m2, m3, m4, m5 = st.columns(5)
                     m1.metric("Price", f"${curr_price:.2f}")
                     m2.metric("Alpha Score", f"{score}/100")
                     m3.metric("Trend", plan['bias'])
                     m4.metric("Volatility", f"{vol:.1f}%")
-                    m5.metric("True VRP Edge", f"{vrp_edge_val:+.2f}%")
-                    m6.metric("Trend Reversal", reversal_signal)
+                    m5.metric("Trend Reversal", reversal_signal)
 
+                    m6, m7, m8, m9, m10 = st.columns(5)
+                    m6.metric("VRP Edge", f"{vrp_edge_val:+.2f}%")
+                    m7.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                    m8.metric("Support (Floor)", f"${sup:.2f}")
+                    m9.metric("Resistance (Ceiling)", f"${res:.2f}")
+                    m10.metric("95% VaR (Variance)", f"${var_95:.2f}")
+
+                    # Exact Backtest layout match from user screenshot
                     st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
                     b1, b2, b3, b4, b5 = st.columns(5)
                     b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
                     b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
                     b3.metric("Alpha Generated", f"{outperf:+.1f}%")
-                    b4.metric("Max DD", f"{max_dd:.1f}%", delta_color="inverse")
-                    b5.metric("Kelly Position Size", f"{half_kelly:.1f}%", delta_color="normal")
+                    b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
+                    b5.metric("Kelly Fraction (Half)", f"{half_kelly:.1f}%", delta_color="normal")
 
                     st.markdown("### 🎯 Advanced Options Architecture (For Pros)")
                     st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
@@ -584,3 +604,13 @@ if check_login():
         if st.button("Log Out"):
             st.session_state.authenticated = False
             st.rerun()
+
+    # ==========================================
+    # --- SEC REGULATORY COMPLIANCE FOOTER ---
+    # ==========================================
+    st.markdown("<br><br><br><hr>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="font-size: 0.8em; color: #475569; line-height: 1.6; text-align: justify; padding-bottom: 20px;">
+    <b>SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated V22.2 Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.
+    </div>
+    """, unsafe_allow_html=True)
