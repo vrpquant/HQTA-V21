@@ -15,7 +15,7 @@ import time  # [ADDED] For institutional API throttling
 # ==========================================
 
 TICKER_SETS = {
-    "🔥 Magnificent 7 + Crypto: [
+    "🔥 Magnificent 7 + Crypto": [
         "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA", "BTC-USD"
     ],
     "💻 Semiconductors (AI)": [
