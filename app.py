@@ -8,6 +8,16 @@ from datetime import datetime
 import pytz
 import os
 import time
+import bcrypt        # FIX 1: pip install bcrypt
+import logging       # FIX 2: structured error logging
+
+# FIX 2: Single logger for the entire app — replace all bare except: pass
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("vrp_quant")
 
 # ==========================================
 # --- INSTITUTIONAL UI THEME INJECTION ---
@@ -122,7 +132,8 @@ class AlphaEngine:
             if rsi < 30: score += 15
             elif rsi > 70: score -= 15
             return max(0, min(100, int(score)))
-        except:
+        except Exception as e:                                          # FIX 2
+            logger.exception("AlphaEngine.calculate_score failed: %s", e)
             return 50
 
 class BacktestEngine:
@@ -175,7 +186,8 @@ class QuantLogic:
                 atm_idx = (calls['strike'] - current_price).abs().idxmin()
                 return round(calls.loc[atm_idx, 'impliedVolatility'] * 100, 2)
             return None
-        except:
+        except Exception as e:                                          # FIX 2
+            logger.warning("QuantLogic.get_atm_iv(%s) failed: %s", ticker, e)
             return None
 
     @staticmethod
@@ -212,7 +224,8 @@ class QuantLogic:
             elif rsi.iloc[-2] > 70 and rsi.iloc[-1] <= 70:
                 return "RSI Bear Rejection"
             return "No Active Reversal"
-        except:
+        except Exception as e:                                          # FIX 2
+            logger.warning("QuantLogic.detect_reversal failed: %s", e)
             return "No Active Reversal"
 
     @staticmethod
@@ -236,7 +249,8 @@ class QuantLogic:
             daily_returns = df['Close'].pct_change().dropna()
             var_pct = np.percentile(daily_returns, (1 - confidence) * 100)
             return round(price * (1 + var_pct), 2)
-        except:
+        except Exception as e:                                          # FIX 2
+            logger.exception("QuantLogic.calculate_var failed: %s", e)
             return df['Close'].iloc[-1] * 0.95
 
     @staticmethod
@@ -368,7 +382,8 @@ class MonteCarloEngine:
             for t in range(1, days+1):
                 paths[t] = paths[t-1] * np.exp((mu - 0.5*sigma**2)*dt + sigma*np.sqrt(dt)*z[t-1] + jumps[t-1])
             return pd.DataFrame(paths)
-        except:
+        except Exception as e:                                          # FIX 2
+            logger.exception("MonteCarloEngine.simulate_paths failed: %s", e)
             return pd.DataFrame(np.tile(df['Close'].iloc[-1], (days+1, sims)))
 
 class MarketScanner:
@@ -376,6 +391,7 @@ class MarketScanner:
     @st.cache_data(ttl=900, show_spinner=False)
     def run_scan(tickers):
         results = []
+        failed  = []                                                    # FIX 2
         for t in tickers:
             try:
                 stock = yf.Ticker(t)
@@ -400,9 +416,16 @@ class MarketScanner:
                     })
                 
                 time.sleep(1.5)
-            except Exception as e:
-                pass
+            except Exception as e:                                      # FIX 2
+                logger.error("MarketScanner.run_scan failed on %s: %s", t, e)
+                failed.append((t, str(e)))
         
+        # FIX 2: surface failed tickers to the UI instead of silently dropping them
+        if failed:
+            with st.expander(f"⚠️ {len(failed)} ticker(s) could not be scanned — click for details"):
+                for sym, reason in failed:
+                    st.text(f"  {sym}: {reason}")
+
         df_results = pd.DataFrame(results)
         if df_results.empty:
             return df_results
@@ -428,23 +451,80 @@ except Exception as e:
 PAYPAL_ANALYST_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA" 
 PAYPAL_GOD_MODE_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI"
 
+# ==========================================
+# FIX 1: SECURE AUTHENTICATION
+# ==========================================
+# Brute-force constants
+_MAX_ATTEMPTS   = 5    # failed logins before lockout
+_LOCKOUT_SEC    = 300  # 5-minute lockout
+_ATTEMPT_WINDOW = 60   # sliding window in seconds
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    """Constant-time bcrypt comparison. Never use plain == hashed."""
+    try:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except Exception:
+        return False  # malformed hash → fail closed
+
+def _is_locked_out() -> tuple:
+    """Returns (is_locked: bool, seconds_remaining: float)."""
+    now = time.time()
+    locked_until = st.session_state.get("locked_until", 0.0)
+    if now < locked_until:
+        return True, locked_until - now
+    return False, 0.0
+
+def _record_failed_attempt():
+    """Tracks attempts in a sliding window; triggers lockout at threshold."""
+    now = time.time()
+    attempts = [t for t in st.session_state.get("login_attempts", [])
+                if now - t < _ATTEMPT_WINDOW]
+    attempts.append(now)
+    st.session_state.login_attempts = attempts
+    if len(attempts) >= _MAX_ATTEMPTS:
+        st.session_state.locked_until = now + _LOCKOUT_SEC
+        st.session_state.login_attempts = []
+
 def check_login():
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-        st.session_state.tier = None
+    # Initialise session keys (idempotent)
+    st.session_state.setdefault("authenticated", False)
+    st.session_state.setdefault("tier", None)
+    st.session_state.setdefault("login_attempts", [])
+    st.session_state.setdefault("locked_until", 0.0)
+
     if not st.session_state.authenticated:
         st.markdown("## 🔒 VRP Quant Terminal Login")
+
+        # FIX 1: enforce lockout before rendering the form
+        locked, remaining = _is_locked_out()
+        if locked:
+            mins, secs = int(remaining // 60), int(remaining % 60)
+            st.error(f"⛔ Too many failed attempts. Locked for **{mins}m {secs}s**. Please try again later.")
+            return False
+
         c1, c2 = st.columns([1, 2])
         with c1:
             user = st.text_input("Username", key="login_u")
-            pwd = st.text_input("Password", type="password", key="login_p")
+            pwd  = st.text_input("Password", type="password", key="login_p")
+
+            # FIX 1: warn user how many attempts remain
+            attempt_count = len(st.session_state.login_attempts)
+            if attempt_count > 0:
+                st.warning(f"⚠️ {_MAX_ATTEMPTS - attempt_count} attempt(s) remaining before lockout.")
+
             if st.button("Login"):
-                if user in USERS and USERS[user]["password"] == pwd:
+                user_record = USERS.get(user)
+                # FIX 1: bcrypt comparison — never plain-text ==
+                if user_record and _verify_password(pwd, user_record["password"]):
                     st.session_state.authenticated = True
-                    st.session_state.tier = USERS[user]["tier"]
+                    st.session_state.tier = user_record["tier"]
+                    st.session_state.login_attempts = []
+                    st.session_state.locked_until   = 0.0
                     st.rerun()
-                else: 
-                    st.error("Invalid Credentials")
+                else:
+                    _record_failed_attempt()
+                    st.error("Invalid credentials.")  # intentionally vague
+
         st.markdown("---")
         st.markdown("### 👑 Founding Member Cohort (Beta)")
         b1, b2 = st.columns(2)
