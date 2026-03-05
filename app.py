@@ -499,7 +499,7 @@ if check_login():
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             else: selected_tickers = TICKER_SETS[sector_choice]
             
-            if st.button("Run Live Sector Scan (Throttled)") and selected_tickers:
+            if st.button("Run Live Sector Scan") and selected_tickers:
                 with st.spinner("Running Live Throttled Scan..."):
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
