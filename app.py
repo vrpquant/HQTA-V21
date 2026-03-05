@@ -113,22 +113,17 @@ class AlphaEngine:
             sma200 = calc_df['Close'].rolling(200).mean()
             trend_spread = (sma50 - sma200) / sma200
             trend_z = (trend_spread.iloc[-1] - trend_spread.mean()) / (trend_spread.std() + 1e-9)
-            
-            # PATCH: full RSI series calculation (consistent with detect_reversal)
             delta = calc_df['Close'].diff()
-            gain = delta.where(delta > 0, 0).rolling(14).mean()
-            loss = -delta.where(delta < 0, 0).rolling(14).mean()
+            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
             rs = gain / (loss + 1e-9)
-            rsi_series = 100 - (100 / (1 + rs))
-            rsi = rsi_series.iloc[-1]
-            
+            rsi = 100 - (100 / (1 + rs.iloc[-1]))
             score = 50 + max(-25, min(25, trend_z * 12.5))
             if rsi < 30: score += 15
             elif rsi > 70: score -= 15
             return max(0, min(100, int(score)))
         except:
             return 50
-
 
 class BacktestEngine:
     @staticmethod
@@ -160,12 +155,10 @@ class BacktestEngine:
             loss_avg = abs(losses.mean())
             if loss_avg > 0:
                 win_prob = len(wins) / len(bt_df)
-                b = win_avg / loss_avg                          # net odds received on win
-                kelly_pct = win_prob - (1 - win_prob) / b       # PATCH: correct generalized Kelly formula
+                kelly_pct = (win_avg / loss_avg) - (1 - win_prob)
                 half_kelly = max(0, min(100, kelly_pct * 50))
                 
         return round(win_rate,1), round(cumulative*100,1), round(outperf*100,1), round(max_dd,1), round(half_kelly,1)
-
 
 class QuantLogic:
     @staticmethod
@@ -258,7 +251,6 @@ class QuantLogic:
         d2 = d1 - sigma * np.sqrt(T)
         return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
 
-
 class TradeArchitect:
     @staticmethod
     def prob_itm(S, K, T, r, sigma, option_type='call'):
@@ -347,7 +339,6 @@ class TradeArchitect:
             
         return hybrid
 
-
 class MonteCarloEngine:
     @staticmethod
     def simulate_paths(df, days=30, sims=1000):
@@ -369,7 +360,6 @@ class MonteCarloEngine:
         except:
             return pd.DataFrame(np.tile(df['Close'].iloc[-1], (days+1, sims)))
 
-
 class MarketScanner:
     @staticmethod
     @st.cache_data(ttl=900, show_spinner=False)
@@ -384,6 +374,7 @@ class MarketScanner:
                     score = AlphaEngine.calculate_score(df)
                     vol = QuantLogic.calculate_vol(df)
                     vrp = QuantLogic.calculate_vrp_edge(t, df, mode="scanner")
+                    reversal = QuantLogic.detect_reversal(df)
                     sup, res = QuantLogic.get_support_resistance(df)
                     win_rate, strat_ret, outperf, max_dd, kelly = BacktestEngine.run_quick_backtest(df)
                     plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
@@ -391,8 +382,8 @@ class MarketScanner:
                     
                     results.append({
                         "Ticker": t, "Price": round(price,2), "Alpha Score": score, "Trend": plan['bias'],
-                        "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%", "Support": round(sup,2),
-                        "Resistance": round(res,2), 
+                        "Reversal": reversal, "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%", 
+                        "Support": round(sup,2), "Resistance": round(res,2), 
                         "HQTA Apex Action": hybrid['action'],
                         "Strategy": plan['name'], "Kelly": f"{kelly}%"
                     })
@@ -470,30 +461,7 @@ if check_login():
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
         else:
-            st.markdown("### 🏆 Today's Apex Top 10 (Pipeline Output)")
-            if st.button("🔄 Load Offline Institutional Scan", use_container_width=True):
-                with st.spinner("Decrypting quantitative pipeline..."):
-                    try:
-                        if os.path.exists("latest_scan.csv"):
-                            df_scan = pd.read_csv("latest_scan.csv")
-                            styled_df = df_scan.style.set_properties(**{
-                                'background-color': '#1E293B',
-                                'color': '#F8FAFC',
-                                'border-color': '#334155'
-                            }).set_properties(subset=['HQTA Apex Action'], **{
-                                'background-color': '#0C4A6E',
-                                'color': '#38BDF8',
-                                'font-weight': 'bold'
-                            })
-                            st.dataframe(styled_df, use_container_width=True)
-                        else:
-                            st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local data_engine.py first.")
-                    except Exception as e:
-                        st.error(f"Error loading dashboard: {e}")
-
-            st.markdown("---")
-            
-            st.markdown("### ⚡ Live Manual Scanner")
+            st.markdown("### ⚡ Live Sector Scanner")
             col1, col2 = st.columns([1, 2])
             with col1:
                 options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
@@ -505,21 +473,24 @@ if check_login():
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             else: selected_tickers = TICKER_SETS[sector_choice]
             
-            if st.button("Run Live Sector Scan (Throttled)") and selected_tickers:
-                with st.spinner("Running Live Throttled Scan..."):
+            if st.button("Run Live Sector Scan") and selected_tickers:
+                with st.spinner("Running Live Sector Scan..."):
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
                         if not df_scan.empty:
-                            styled_df = df_scan.style.set_properties(**{
-                                'background-color': '#1E293B',
-                                'color': '#F8FAFC',
-                                'border-color': '#334155'
-                            }).set_properties(subset=['HQTA Apex Action'], **{
-                                'background-color': '#0C4A6E',
-                                'color': '#38BDF8',
-                                'font-weight': 'bold'
-                            })
-                            st.dataframe(styled_df, use_container_width=True)
+                            if 'HQTA Apex Action' in df_scan.columns:
+                                styled_df = df_scan.style.set_properties(**{
+                                    'background-color': '#1E293B',
+                                    'color': '#F8FAFC',
+                                    'border-color': '#334155'
+                                }).set_properties(subset=['HQTA Apex Action'], **{
+                                    'background-color': '#0C4A6E',
+                                    'color': '#38BDF8',
+                                    'font-weight': 'bold'
+                                })
+                                st.dataframe(styled_df, use_container_width=True)
+                            else:
+                                st.dataframe(df_scan, use_container_width=True)
                     except Exception as e:
                         st.error(f"Scan failed: {e}")
 
@@ -530,6 +501,7 @@ if check_login():
         if st.button("Run Deep Dive Analysis"):
             with st.spinner("Extracting Advanced Institutional Metrics..."):
                 try:
+                    # SURGICAL STRIKE: Single ping, no throttling needed.
                     stock = yf.Ticker(ticker)
                     df = stock.history(period="2y")
                     
@@ -548,8 +520,11 @@ if check_login():
                     
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
                     hybrid = TradeArchitect.generate_hybrid_plan(curr_price, score, vrp_edge_val, sup, res)
-                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=5000 if tier == "GOD_MODE" else 1000)
+                    
+                    # 10,000 MONTE CARLO SIMULATIONS FOR GOD MODE TIER
+                    mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=10000 if tier == "GOD_MODE" else 1000)
 
+                    # --- THE AWESOME SPOT UI BOX ---
                     st.markdown(f"""
                     <div class="apex-box">
                         <div class="apex-title">🏆 THE AWESOME SPOT: {hybrid['name']}</div>
@@ -594,7 +569,7 @@ if check_login():
                     fig.update_layout(
                         template="plotly_dark", 
                         height=500, 
-                        title="Institutional Chart (History + 30-Day Projection)",
+                        title=f"Institutional Chart (History + 30-Day Projection | {10000 if tier == 'GOD_MODE' else 1000} Simulations)",
                         paper_bgcolor='#0B0F19',
                         plot_bgcolor='#0F172A',
                         font=dict(color='#F8FAFC')
