@@ -468,17 +468,22 @@ if check_login():
                     try:
                         if os.path.exists("latest_scan.csv"):
                             df_scan = pd.read_csv("latest_scan.csv")
-                            # Apply Institutional DataFrame Styling
-                            styled_df = df_scan.style.set_properties(**{
-                                'background-color': '#1E293B',
-                                'color': '#F8FAFC',
-                                'border-color': '#334155'
-                            }).set_properties(subset=['HQTA Apex Action'], **{
-                                'background-color': '#0C4A6E',
-                                'color': '#38BDF8',
-                                'font-weight': 'bold'
-                            })
-                            st.dataframe(styled_df, use_container_width=True)
+                            # Apply Institutional DataFrame Styling Safely
+                            if 'HQTA Apex Action' in df_scan.columns:
+                                styled_df = df_scan.style.set_properties(**{
+                                    'background-color': '#1E293B',
+                                    'color': '#F8FAFC',
+                                    'border-color': '#334155'
+                                }).set_properties(subset=['HQTA Apex Action'], **{
+                                    'background-color': '#0C4A6E',
+                                    'color': '#38BDF8',
+                                    'font-weight': 'bold'
+                                })
+                                st.dataframe(styled_df, use_container_width=True)
+                            else:
+                                # Fallback if the CSV is an old version without the column
+                                st.dataframe(df_scan, use_container_width=True)
+                                st.warning("⚠️ Note: You are viewing legacy pipeline data. Run your local data_engine.py to update.")
                         else:
                             st.error("⚠️ Pipeline link severed: 'latest_scan.csv' not found. Run your local data_engine.py first.")
                     except Exception as e:
@@ -504,16 +509,20 @@ if check_login():
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
                         if not df_scan.empty:
-                            styled_df = df_scan.style.set_properties(**{
-                                'background-color': '#1E293B',
-                                'color': '#F8FAFC',
-                                'border-color': '#334155'
-                            }).set_properties(subset=['HQTA Apex Action'], **{
-                                'background-color': '#0C4A6E',
-                                'color': '#38BDF8',
-                                'font-weight': 'bold'
-                            })
-                            st.dataframe(styled_df, use_container_width=True)
+                            # Apply Institutional DataFrame Styling Safely
+                            if 'HQTA Apex Action' in df_scan.columns:
+                                styled_df = df_scan.style.set_properties(**{
+                                    'background-color': '#1E293B',
+                                    'color': '#F8FAFC',
+                                    'border-color': '#334155'
+                                }).set_properties(subset=['HQTA Apex Action'], **{
+                                    'background-color': '#0C4A6E',
+                                    'color': '#38BDF8',
+                                    'font-weight': 'bold'
+                                })
+                                st.dataframe(styled_df, use_container_width=True)
+                            else:
+                                st.dataframe(df_scan, use_container_width=True)
                     except Exception as e:
                         st.error(f"Scan failed: {e}")
 
