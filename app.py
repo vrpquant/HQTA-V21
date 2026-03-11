@@ -230,6 +230,7 @@ class QuantLogic:
         
     @staticmethod
     def calculate_var(df, confidence=0.95):
+        """Standard 95% Downside Value at Risk"""
         try:
             price = df['Close'].iloc[-1]
             daily_returns = df['Close'].pct_change().dropna()
@@ -237,6 +238,17 @@ class QuantLogic:
             return round(price * (1 + var_pct), 2)
         except:
             return df['Close'].iloc[-1] * 0.95
+
+    @staticmethod
+    def calculate_upside_var(df, confidence=0.95):
+        """95% Upside Variance (Used for sizing Short positions below Resistance)"""
+        try:
+            price = df['Close'].iloc[-1]
+            daily_returns = df['Close'].pct_change().dropna()
+            var_pct = np.percentile(daily_returns, confidence * 100)
+            return round(price * (1 + var_pct), 2)
+        except:
+            return df['Close'].iloc[-1] * 1.05
 
     @staticmethod
     def calculate_greeks(S, K, T, r, sigma, option_type='call'):
@@ -386,12 +398,45 @@ class MarketScanner:
                     vrp = QuantLogic.calculate_vrp_edge(t, df, mode="scanner")
                     reversal = QuantLogic.detect_reversal(df)
                     sup, res = QuantLogic.get_support_resistance(df)
+                    
+                    var_95 = QuantLogic.calculate_var(df)          # Standard Downside VaR
+                    upside_var = QuantLogic.calculate_upside_var(df) # Upside VaR for shorting
+                    
                     win_rate, strat_ret, outperf, max_dd, kelly, _ = BacktestEngine.run_quick_backtest(df)
                     plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
                     hybrid = TradeArchitect.generate_hybrid_plan(price, score, vrp, sup, res)
                     
+                    # ==========================================
+                    # --- THE ULTIMATE GOD-MODE METRIC LOGIC ---
+                    # ==========================================
+                    
+                    # ULTIMATE LONG CONDITIONS
+                    is_ult_long = (
+                        var_95 > sup and
+                        score > 58 and
+                        ("Bullish" in plan['bias'] or "Bear Rejection" in reversal) and
+                        vrp < 0 and
+                        win_rate > 10.0 and
+                        strat_ret > 50.0 and
+                        kelly > 2.0
+                    )
+                    
+                    # ULTIMATE SHORT CONDITIONS (Inverted Math)
+                    is_ult_short = (
+                        upside_var < res and
+                        score < 42 and
+                        ("Bearish" in plan['bias'] or "Bull Bounce" in reversal) and
+                        vrp > 0 and 
+                        win_rate > 10.0 and
+                        strat_ret > 50.0 and 
+                        kelly > 2.0
+                    )
+
+                    ultimate_signal = "🎯 ULTIMATE LONG" if is_ult_long else "🩸 ULTIMATE SHORT" if is_ult_short else "Standard"
+
                     results.append({
-                        "Ticker": t, "Price": round(price,2), "Alpha Score": score, "Trend": plan['bias'],
+                        "Ticker": t, "Price": round(price,2), "Ultimate Signal": ultimate_signal,
+                        "Alpha Score": score, "Trend": plan['bias'],
                         "Reversal": reversal, "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%", 
                         "Support": round(sup,2), "Resistance": round(res,2), 
                         "HQTA Apex Action": hybrid['action'],
@@ -472,35 +517,57 @@ if check_login():
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
         else:
             st.markdown("### ⚡ Live Sector Scanner")
-            col1, col2 = st.columns([1, 2])
+            col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
                 options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
                 sector_choice = st.selectbox("Select Sector to Scan:", options)
+            
             selected_tickers = []
             if sector_choice == "✨ Custom Watchlist":
                 with col2:
                     custom_input = st.text_area("Enter Tickers:", "PLTR, SOFI")
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             else: selected_tickers = TICKER_SETS[sector_choice]
+
+            with col3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                strict_mode = st.checkbox("⚡ ISOLATE ULTIMATE MASTER SETUPS ONLY", value=False, help="Filters out all standard setups. Only shows tickers passing the strict quantitative logic.")
             
             if st.button("Run Live Sector Scan") and selected_tickers:
-                with st.spinner("Running Live Sector Scan..."):
+                with st.spinner("Running Live Sector Scan & Checking Ultimate Conditions..."):
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
                         if not df_scan.empty:
+                            
+                            # Filter logic for Ultimate Checkbox
+                            if strict_mode:
+                                df_scan = df_scan[df_scan["Ultimate Signal"] != "Standard"]
+                                if df_scan.empty:
+                                    st.warning("⚠️ No assets currently meet the strict Ultimate Master criteria. Cash is a position.")
+                                    st.stop()
+                                    
+                            # Styling logic for Ultimate Signals and Apex Box
+                            def highlight_ultimate(row):
+                                if row.get("Ultimate Signal") == "🎯 ULTIMATE LONG":
+                                    return ['background-color: #064E3B; color: #34D399; font-weight: bold'] * len(row)
+                                elif row.get("Ultimate Signal") == "🩸 ULTIMATE SHORT":
+                                    return ['background-color: #450A0A; color: #F87171; font-weight: bold'] * len(row)
+                                return [''] * len(row)
+
+                            styled_df = df_scan.style.apply(highlight_ultimate, axis=1).set_properties(**{
+                                'background-color': '#1E293B',
+                                'color': '#F8FAFC',
+                                'border-color': '#334155'
+                            })
+                            
                             if 'HQTA Apex Action' in df_scan.columns:
-                                styled_df = df_scan.style.set_properties(**{
-                                    'background-color': '#1E293B',
-                                    'color': '#F8FAFC',
-                                    'border-color': '#334155'
-                                }).set_properties(subset=['HQTA Apex Action'], **{
+                                styled_df = styled_df.set_properties(subset=['HQTA Apex Action'], **{
                                     'background-color': '#0C4A6E',
                                     'color': '#38BDF8',
                                     'font-weight': 'bold'
                                 })
-                                st.dataframe(styled_df, use_container_width=True)
-                            else:
-                                st.dataframe(df_scan, use_container_width=True)
+                                
+                            st.dataframe(styled_df, use_container_width=True)
                     except Exception as e:
                         st.error(f"Scan failed: {e}")
 
@@ -569,7 +636,7 @@ if check_login():
                     b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
                     b5.metric("Kelly Fraction (Half)", f"{half_kelly:.1f}%", delta_color="normal")
 
-                    # --- NEW HQTA DIRECTIVE INJECTION ---
+                    # --- HQTA DIRECTIVE INJECTION ---
                     allocation_action = "DEPLOY CAPITAL" if half_kelly > 0 else "FLATTEN POSITION / NO EDGE"
                     box_color = "#082F49" if half_kelly > 0 else "#450a0a"
                     border_color = "#38BDF8" if half_kelly > 0 else "#f87171"
@@ -585,7 +652,7 @@ if check_login():
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # --- NEW PLOTLY QUANTITATIVE DYNAMICS CHART ---
+                    # --- PLOTLY QUANTITATIVE DYNAMICS CHART ---
                     st.markdown("### 📈 Quantitative Dynamics: Kalman Centerline & EWMA GARCH Bands")
                     fig_price = go.Figure()
                     fig_price.add_trace(go.Candlestick(
