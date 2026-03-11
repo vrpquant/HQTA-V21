@@ -531,7 +531,7 @@ if check_login():
 
             with col3:
                 st.markdown("<br>", unsafe_allow_html=True)
-                strict_mode = st.checkbox("⚡ ISOLATE ULTIMATE MASTER SETUPS ONLY", value=False, help="Filters out all standard setups. Only shows tickers passing the strict quantitative logic.")
+                strict_mode = st.checkbox("⚡ ISOLATE HIGH-CONVICTION QUANTITATIVE SETUPS", value=False, help="Filters out all standard setups. Only shows tickers passing the strict quantitative logic.")
             
             if st.button("Run Live Sector Scan") and selected_tickers:
                 with st.spinner("Running Live Sector Scan & Checking Ultimate Conditions..."):
