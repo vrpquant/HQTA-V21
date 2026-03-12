@@ -634,48 +634,56 @@ if check_login():
                                     st.warning("⚠️ No assets currently meet the strict Ultimate Master criteria. Cash is a position.")
                                     st.stop()
                                     
-                            # --- INSTITUTIONAL-GRADE GRAPHIC COLUMN STYLING ---
-                            def style_institutional_dataframe(df):
-                                # Base slate theme
-                                styler = df.style.set_properties(**{
-                                    'background-color': '#0F172A',
-                                    'color': '#E2E8F0',
-                                    'border': '1px solid #1E293B'
-                                })
+                            # --- INSTITUTIONAL-GRADE HTML TABLE RENDERING ---
+                            def render_institutional_html_table(df):
+                                html = """
+                                <style>
+                                    .inst-table { width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; font-size: 13px; text-align: left; }
+                                    .inst-table th { background-color: #0F172A; color: #94A3B8; padding: 14px 10px; border-bottom: 2px solid #334155; font-weight: 600; white-space: nowrap; }
+                                    .inst-table td { padding: 12px 10px; border-bottom: 1px solid #1E293B; color: #F8FAFC; vertical-align: middle; }
+                                    .inst-table tr:hover td { background-color: #1E293B; }
+                                    .badge-long { background-color: #022C22; color: #10B981; padding: 6px 10px; border-radius: 4px; font-weight: 900; border: 1px solid #047857; font-size: 11px; white-space: nowrap; }
+                                    .badge-short { background-color: #450A0A; color: #EF4444; padding: 6px 10px; border-radius: 4px; font-weight: 900; border: 1px solid #B91C1C; font-size: 11px; white-space: nowrap; }
+                                    .badge-std { color: #475569; font-style: italic; font-size: 11px; }
+                                    .apex-cell { background-color: #082F49 !important; color: #38BDF8 !important; font-weight: bold; border-left: 4px solid #0EA5E9 !important; }
+                                    .ticker-cell { font-weight: 900; color: #FFFFFF; font-size: 14px; }
+                                </style>
+                                <div style="overflow-x: auto; border: 1px solid #334155; border-radius: 8px;">
+                                <table class="inst-table">
+                                    <thead>
+                                        <tr>
+                                """
+                                # Add Headers
+                                for col in df.columns:
+                                    html += f"<th>{col}</th>"
+                                html += "</tr></thead><tbody>"
                                 
-                                # 1. Graphic Look for 'Ultimate Signal' (Neon Badge Style)
-                                def style_signal(val):
-                                    if val == "🎯 ULTIMATE LONG":
-                                        return 'background-color: #022C22; color: #10B981; font-weight: 900; border: 1px solid #047857;'
-                                    elif val == "🩸 ULTIMATE SHORT":
-                                        return 'background-color: #450A0A; color: #EF4444; font-weight: 900; border: 1px solid #B91C1C;'
-                                    return 'color: #475569; font-style: italic;'
-                                
-                                styler = styler.map(style_signal, subset=['Ultimate Signal'])
-                                
-                                # 2. Graphic Look for 'HQTA Apex Action' (Terminal Block Style)
-                                if 'HQTA Apex Action' in df.columns:
-                                    styler = styler.set_properties(subset=['HQTA Apex Action'], **{
-                                        'background-color': '#082F49',
-                                        'color': '#38BDF8',
-                                        'font-weight': '800',
-                                        'border-left': '4px solid #0EA5E9',
-                                        'border-right': '1px solid #0369A1'
-                                    })
+                                # Add Rows and Custom Styles
+                                for _, row in df.iterrows():
+                                    html += "<tr>"
+                                    for col in df.columns:
+                                        val = row[col]
+                                        if col == "Ticker":
+                                            html += f"<td class='ticker-cell'>{val}</td>"
+                                        elif col == "Ultimate Signal":
+                                            if val == "🎯 ULTIMATE LONG":
+                                                html += f"<td><span class='badge-long'>{val}</span></td>"
+                                            elif val == "🩸 ULTIMATE SHORT":
+                                                html += f"<td><span class='badge-short'>{val}</span></td>"
+                                            else:
+                                                html += f"<td><span class='badge-std'>{val}</span></td>"
+                                        elif col == "HQTA Apex Action":
+                                            html += f"<td class='apex-cell'>{val}</td>"
+                                        else:
+                                            html += f"<td>{val}</td>"
+                                    html += "</tr>"
                                     
-                                # 3. Make Tickers pop out like a primary key
-                                styler = styler.set_properties(subset=['Ticker'], **{
-                                    'font-weight': '900',
-                                    'color': '#FFFFFF',
-                                    'background-color': '#1E293B'
-                                })
-                                
-                                return styler
+                                html += "</tbody></table></div>"
+                                return html
 
-                            styled_df = style_institutional_dataframe(df_scan)
-                            
-                            # Render the styled dataframe and explicitly hide the index
-                            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                            # Render the raw HTML directly to the UI
+                            html_table = render_institutional_html_table(df_scan)
+                            st.markdown(html_table, unsafe_allow_html=True)
                             
                     except Exception as e:
                         st.error(f"Scan failed: {e}")
