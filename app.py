@@ -638,26 +638,25 @@ if check_login():
                             def render_institutional_html_table(df):
                                 html = """
                                 <style>
-                                    .inst-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 14px; text-align: left; margin-top: 5px;}
-                                    .inst-table th { color: #64748B; font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 12px 15px 12px 15px; border: none; letter-spacing: 1px; white-space: nowrap;}
-                                    .inst-table tr.data-row { background-color: #1E293B; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: all 0.2s; }
-                                    .inst-table tr.data-row:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); background-color: #27354A; }
-                                    .inst-table td { padding: 16px 15px; border: none; color: #E2E8F0; vertical-align: middle; white-space: nowrap; }
-                                    .inst-table td.wrap-text { white-space: normal; line-height: 1.5; min-width: 250px; }
-                                    .inst-table td:first-child { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
-                                    .inst-table td:last-child { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+                                    .table-container { overflow-x: auto; background-color: #0B0F19; margin-top: 10px; border: 1px solid #1E293B; border-radius: 6px; }
+                                    .inst-table { width: 100%; border-collapse: collapse; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; text-align: left; }
+                                    .inst-table th { background-color: #0F172A; color: #94A3B8; padding: 12px 15px; border-bottom: 2px solid #334155; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.5px; }
+                                    .inst-table tr { border-bottom: 1px solid #1E293B; transition: background-color 0.15s; background-color: #0B0F19; }
+                                    .inst-table tr:hover { background-color: #162032; }
+                                    .inst-table td { padding: 12px 15px; color: #E2E8F0; vertical-align: middle; white-space: nowrap; }
                                     
-                                    .badge-long { background-color: rgba(16, 185, 129, 0.1); color: #10B981; padding: 6px 10px; border-radius: 4px; font-weight: 800; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 12px; letter-spacing: 0.5px; }
-                                    .badge-short { background-color: rgba(239, 68, 68, 0.1); color: #EF4444; padding: 6px 10px; border-radius: 4px; font-weight: 800; border: 1px solid rgba(239, 68, 68, 0.25); font-size: 12px; letter-spacing: 0.5px; }
-                                    .badge-std { color: #64748B; font-style: italic; font-size: 12px; }
+                                    .badge-long { background-color: #022C22; color: #10B981; padding: 4px 8px; border-radius: 4px; font-weight: 900; border: 1px solid #047857; font-size: 11px; letter-spacing: 0.5px; }
+                                    .badge-short { background-color: #450A0A; color: #EF4444; padding: 4px 8px; border-radius: 4px; font-weight: 900; border: 1px solid #B91C1C; font-size: 11px; letter-spacing: 0.5px; }
+                                    .badge-std { color: #475569; font-style: italic; font-size: 11px; }
                                     
-                                    .apex-block { background: linear-gradient(90deg, #0C4A6E 0%, transparent 100%); border-left: 4px solid #0EA5E9; padding: 10px 14px; border-radius: 4px; font-weight: 700; color: #38BDF8; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-                                    .ticker-cell { font-weight: 900; color: #FFFFFF; font-size: 15px; letter-spacing: 0.5px; }
+                                    .apex-cell { background-color: #082F49 !important; border-left: 4px solid #0EA5E9 !important; border-right: 1px solid #0369A1 !important; color: #38BDF8 !important; font-weight: 700; white-space: normal !important; min-width: 250px; line-height: 1.5; }
+                                    
+                                    .ticker-cell { font-weight: 900; color: #FFFFFF; font-size: 14px; letter-spacing: 0.5px; }
                                     .val-pos { color: #10B981; font-weight: 600; }
                                     .val-neg { color: #EF4444; font-weight: 600; }
                                     .val-neu { color: #94A3B8; }
                                 </style>
-                                <div style="overflow-x: auto; padding-bottom: 20px;">
+                                <div class="table-container">
                                 <table class="inst-table">
                                     <thead>
                                         <tr>
@@ -669,7 +668,7 @@ if check_login():
                                 
                                 # Add Rows and Custom Styles
                                 for _, row in df.iterrows():
-                                    html += "<tr class='data-row'>"
+                                    html += "<tr>"
                                     for col in df.columns:
                                         val = row[col]
                                         if col == "Ticker":
@@ -682,7 +681,7 @@ if check_login():
                                             else:
                                                 html += f"<td><span class='badge-std'>{val}</span></td>"
                                         elif col == "HQTA Apex Action":
-                                            html += f"<td class='wrap-text'><div class='apex-block'>{val}</div></td>"
+                                            html += f"<td class='apex-cell'>{val}</td>"
                                         elif col == "VRP Edge":
                                             if isinstance(val, str) and val.startswith("+"):
                                                 html += f"<td class='val-pos'>{val}</td>"
