@@ -638,8 +638,8 @@ if check_login():
                             def render_institutional_html_table(df):
                                 html = """
                                 <style>
-                                    .inst-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 14px; text-align: left; margin-top: -8px;}
-                                    .inst-table th { color: #64748B; font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 0 15px 8px 15px; border: none; letter-spacing: 1px; white-space: nowrap;}
+                                    .inst-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 14px; text-align: left; margin-top: 5px;}
+                                    .inst-table th { color: #64748B; font-weight: 700; font-size: 11px; text-transform: uppercase; padding: 12px 15px 12px 15px; border: none; letter-spacing: 1px; white-space: nowrap;}
                                     .inst-table tr.data-row { background-color: #1E293B; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: all 0.2s; }
                                     .inst-table tr.data-row:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.5); background-color: #27354A; }
                                     .inst-table td { padding: 16px 15px; border: none; color: #E2E8F0; vertical-align: middle; white-space: nowrap; }
