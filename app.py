@@ -634,27 +634,49 @@ if check_login():
                                     st.warning("⚠️ No assets currently meet the strict Ultimate Master criteria. Cash is a position.")
                                     st.stop()
                                     
-                            def highlight_ultimate(row):
-                                if row.get("Ultimate Signal") == "🎯 ULTIMATE LONG":
-                                    return ['background-color: #064E3B; color: #34D399; font-weight: bold'] * len(row)
-                                elif row.get("Ultimate Signal") == "🩸 ULTIMATE SHORT":
-                                    return ['background-color: #450A0A; color: #F87171; font-weight: bold'] * len(row)
-                                return [''] * len(row)
-
-                            styled_df = df_scan.style.apply(highlight_ultimate, axis=1).set_properties(**{
-                                'background-color': '#1E293B',
-                                'color': '#F8FAFC',
-                                'border-color': '#334155'
-                            })
-                            
-                            if 'HQTA Apex Action' in df_scan.columns:
-                                styled_df = styled_df.set_properties(subset=['HQTA Apex Action'], **{
-                                    'background-color': '#0C4A6E',
-                                    'color': '#38BDF8',
-                                    'font-weight': 'bold'
+                            # --- INSTITUTIONAL-GRADE GRAPHIC COLUMN STYLING ---
+                            def style_institutional_dataframe(df):
+                                # Base slate theme
+                                styler = df.style.set_properties(**{
+                                    'background-color': '#0F172A',
+                                    'color': '#E2E8F0',
+                                    'border': '1px solid #1E293B'
                                 })
                                 
-                            st.dataframe(styled_df, use_container_width=True)
+                                # 1. Graphic Look for 'Ultimate Signal' (Neon Badge Style)
+                                def style_signal(val):
+                                    if val == "🎯 ULTIMATE LONG":
+                                        return 'background-color: #022C22; color: #10B981; font-weight: 900; border: 1px solid #047857;'
+                                    elif val == "🩸 ULTIMATE SHORT":
+                                        return 'background-color: #450A0A; color: #EF4444; font-weight: 900; border: 1px solid #B91C1C;'
+                                    return 'color: #475569; font-style: italic;'
+                                
+                                styler = styler.map(style_signal, subset=['Ultimate Signal'])
+                                
+                                # 2. Graphic Look for 'HQTA Apex Action' (Terminal Block Style)
+                                if 'HQTA Apex Action' in df.columns:
+                                    styler = styler.set_properties(subset=['HQTA Apex Action'], **{
+                                        'background-color': '#082F49',
+                                        'color': '#38BDF8',
+                                        'font-weight': '800',
+                                        'border-left': '4px solid #0EA5E9',
+                                        'border-right': '1px solid #0369A1'
+                                    })
+                                    
+                                # 3. Make Tickers pop out like a primary key
+                                styler = styler.set_properties(subset=['Ticker'], **{
+                                    'font-weight': '900',
+                                    'color': '#FFFFFF',
+                                    'background-color': '#1E293B'
+                                })
+                                
+                                return styler
+
+                            styled_df = style_institutional_dataframe(df_scan)
+                            
+                            # Render the styled dataframe and explicitly hide the index
+                            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                            
                     except Exception as e:
                         st.error(f"Scan failed: {e}")
 
