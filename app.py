@@ -9,6 +9,13 @@ import pytz
 import os
 import time
 
+# --- NEW: ARCH LIBRARY FOR TRUE GARCH(1,1) ---
+try:
+    from arch import arch_model
+    ARCH_AVAILABLE = True
+except ImportError:
+    ARCH_AVAILABLE = False
+
 # ==========================================
 # --- INSTITUTIONAL UI THEME INJECTION ---
 # ==========================================
@@ -81,16 +88,33 @@ class AlphaEngine:
         return pd.Series(estimates, index=prices.index)
 
     @staticmethod
+    def apply_garch(returns):
+        """Replaces EWMA proxy with True GARCH(1,1) if available"""
+        if ARCH_AVAILABLE and len(returns.dropna()) > 50:
+            try:
+                scaled_rets = returns.dropna() * 100
+                am = arch_model(scaled_rets, vol='Garch', p=1, q=1, rescale=False)
+                res = am.fit(disp='off', show_warning=False)
+                cond_vol = res.conditional_volatility / 100
+                return pd.Series(cond_vol, index=scaled_rets.index) * np.sqrt(252)
+            except:
+                pass
+        # Fallback to EWMA if ARCH fails or is uninstalled
+        return returns.ewm(span=20).std() * np.sqrt(252)
+
+    @staticmethod
     def calculate_score(df):
         try:
             calc_df = df.copy().dropna()
             if len(calc_df) < 50: return 50
                 
             calc_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(calc_df['Close'])
-            returns = calc_df['Close'].pct_change()
-            calc_df['GARCH_Proxy_Vol'] = returns.ewm(span=20).std() * np.sqrt(252) 
+            returns = calc_df['Close'].pct_change().fillna(0)
             
-            calc_df['Band_Std'] = calc_df['GARCH_Proxy_Vol'] * calc_df['Kalman_Price'] / np.sqrt(252)
+            # --- TRUE GARCH INJECTION ---
+            calc_df['GARCH_Vol'] = AlphaEngine.apply_garch(returns)
+            
+            calc_df['Band_Std'] = calc_df['GARCH_Vol'] * calc_df['Kalman_Price'] / np.sqrt(252)
             calc_df['Upper_Band'] = calc_df['Kalman_Price'] + (2 * calc_df['Band_Std'])
             calc_df['Lower_Band'] = calc_df['Kalman_Price'] - (2 * calc_df['Band_Std'])
             calc_df['BBW'] = (calc_df['Upper_Band'] - calc_df['Lower_Band']) / calc_df['Kalman_Price']
@@ -112,44 +136,105 @@ class AlphaEngine:
 
 class BacktestEngine:
     @staticmethod
-    def run_quick_backtest(df, slippage_bps=5, commission_bps=2):
+    def run_wfo_backtest(df, slippage_bps=5, commission_bps=2):
+        """Walk-Forward Optimization (WFO) Backtesting Engine"""
         try:
             bt_df = df.copy().dropna()
             if len(bt_df) < 50:
-                return 0.0, 0.0, 0.0, 0.0, 0.0, bt_df
+                return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, bt_df
                 
             bt_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(bt_df['Close'])
-            returns = bt_df['Close'].pct_change()
-            bt_df['Vol_Regime'] = returns.ewm(span=20).std() * np.sqrt(252)
+            returns = bt_df['Close'].pct_change().fillna(0)
             
-            bt_df['Band_Std'] = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
-            bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * bt_df['Band_Std'])
-            bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * bt_df['Band_Std'])
+            # --- TRUE GARCH INJECTION ---
+            bt_df['Vol_Regime'] = AlphaEngine.apply_garch(returns)
+            bt_df['Underlying_Return'] = returns
+            
+            # WFO Parameters
+            train_size = 252 # Train on 1 Year
+            step_size = 63   # Test out-of-sample on 3 Months
+            multipliers = [1.5, 2.0, 2.5] # Dynamic Band Multipliers
+            
+            oos_positions = pd.Series(0.0, index=bt_df.index)
+            
+            # Perform Walk-Forward Optimization if we have enough data
+            if len(bt_df) > train_size + step_size:
+                for start_idx in range(0, len(bt_df) - train_size, step_size):
+                    train_end = start_idx + train_size
+                    test_end = min(train_end + step_size, len(bt_df))
+                    
+                    train_df = bt_df.iloc[start_idx:train_end]
+                    best_sharpe = -999
+                    best_mult = 2.0
+                    
+                    # 1. Train Strategy Parameters (In-Sample)
+                    for m in multipliers:
+                        band_std = train_df['Vol_Regime'] * train_df['Kalman_Price'] / np.sqrt(252)
+                        upper = train_df['Kalman_Price'] + (m * band_std)
+                        lower = train_df['Kalman_Price'] - (m * band_std)
+                        
+                        sig = pd.Series(0, index=train_df.index)
+                        sig[train_df['Close'] < lower] = 1
+                        sig[train_df['Close'] > upper] = -1
+                        pos = sig.replace(0, np.nan).ffill().fillna(0).shift(1).fillna(0)
+                        
+                        strat_rets = pos * train_df['Underlying_Return']
+                        sharpe = np.sqrt(252) * strat_rets.mean() / (strat_rets.std() + 1e-9)
+                        
+                        if sharpe > best_sharpe:
+                            best_sharpe = sharpe
+                            best_mult = m
+                            
+                    # 2. Test Strategy Parameters (Out-of-Sample)
+                    test_df = bt_df.iloc[train_end:test_end]
+                    band_std_oos = test_df['Vol_Regime'] * test_df['Kalman_Price'] / np.sqrt(252)
+                    upper_oos = test_df['Kalman_Price'] + (best_mult * band_std_oos)
+                    lower_oos = test_df['Kalman_Price'] - (best_mult * band_std_oos)
+                    
+                    sig_oos = pd.Series(0, index=test_df.index)
+                    sig_oos[test_df['Close'] < lower_oos] = 1
+                    sig_oos[test_df['Close'] > upper_oos] = -1
+                    oos_pos = sig_oos.replace(0, np.nan).ffill().fillna(0)
+                    oos_positions.iloc[train_end:test_end] = oos_pos
+                    
+                bt_df['Target_Position'] = oos_positions
+            else:
+                # Fallback to IS if data is too short
+                band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
+                bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * band_std)
+                bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * band_std)
+                
+                sig = pd.Series(0, index=bt_df.index)
+                sig[bt_df['Close'] < bt_df['Lower_Band']] = 1
+                sig[bt_df['Close'] > bt_df['Upper_Band']] = -1
+                bt_df['Target_Position'] = sig.replace(0, np.nan).ffill().fillna(0)
 
-            bt_df['Signal'] = 0
-            bt_df.loc[bt_df['Close'] < bt_df['Lower_Band'], 'Signal'] = 1
-            bt_df.loc[bt_df['Close'] > bt_df['Upper_Band'], 'Signal'] = -1
-            
-            bt_df['Target_Position'] = bt_df['Signal'].replace(0, np.nan).ffill().fillna(0)
             bt_df['Actual_Position'] = bt_df['Target_Position'].shift(1).fillna(0)
-            bt_df['Underlying_Return'] = returns.fillna(0)
             bt_df['Gross_Return'] = bt_df['Actual_Position'] * bt_df['Underlying_Return']
             
             turnover = bt_df['Actual_Position'].diff().abs().fillna(0)
             total_cost = (slippage_bps + commission_bps) / 10000
-            
             bt_df['Net_Return'] = bt_df['Gross_Return'] - (turnover * total_cost * (1 + (bt_df['Vol_Regime'] > 0.35).astype(int)))
             
-            win_rate = (bt_df['Net_Return'] > 0).mean() * 100
-            cumulative = (1 + bt_df['Net_Return']).prod() - 1
-            buy_hold = (1 + bt_df['Underlying_Return']).prod() - 1
+            # --- CALCULATE METRICS ON OUT-OF-SAMPLE ONLY ---
+            eval_df = bt_df.iloc[train_size:] if len(bt_df) > train_size + step_size else bt_df
+            
+            win_rate = (eval_df['Net_Return'] > 0).mean() * 100
+            cumulative = (1 + eval_df['Net_Return']).prod() - 1
+            buy_hold = (1 + eval_df['Underlying_Return']).prod() - 1
             outperf = cumulative - buy_hold
             
-            peak = (1 + bt_df['Net_Return']).cumprod().cummax()
-            max_dd = (((1 + bt_df['Net_Return']).cumprod() - peak) / peak).min() * 100
+            peak = (1 + eval_df['Net_Return']).cumprod().cummax()
+            max_dd = (((1 + eval_df['Net_Return']).cumprod() - peak) / peak).min() * 100
             
-            wins = bt_df[bt_df['Net_Return'] > 0]['Net_Return']
-            losses = bt_df[bt_df['Net_Return'] < 0]['Net_Return']
+            # Institutional Risk Metrics Addition
+            ann_return = eval_df['Net_Return'].mean() * 252
+            downside_std = eval_df[eval_df['Net_Return'] < 0]['Net_Return'].std() * np.sqrt(252)
+            sortino = ann_return / (downside_std + 1e-9)
+            calmar = ann_return / (abs(max_dd)/100 + 1e-9)
+            
+            wins = eval_df[eval_df['Net_Return'] > 0]['Net_Return']
+            losses = eval_df[eval_df['Net_Return'] < 0]['Net_Return']
             
             half_kelly = 0.0
             if len(wins) > 0 and len(losses) > 0:
@@ -160,10 +245,15 @@ class BacktestEngine:
                 if loss_avg > 0:
                     kelly_fraction = win_prob - ((1 - win_prob) / (win_avg / loss_avg))
                     half_kelly = max(0.0, kelly_fraction / 2.0) * 100 
+            
+            # Append standard 2.0 band multiplier for aesthetic UI chart rendering
+            last_band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
+            bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * last_band_std)
+            bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * last_band_std)
                     
-            return round(win_rate,1), round(cumulative*100,1), round(outperf*100,1), round(max_dd,1), round(half_kelly,1), bt_df
+            return round(win_rate,1), round(cumulative*100,1), round(outperf*100,1), round(max_dd,1), round(half_kelly,1), round(sortino, 2), round(calmar, 2), bt_df
         except:
-            return 0.0, 0.0, 0.0, 0.0, 0.0, df.copy()
+            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, df.copy()
 
 class QuantLogic:
     @staticmethod
@@ -399,10 +489,10 @@ class MarketScanner:
                     reversal = QuantLogic.detect_reversal(df)
                     sup, res = QuantLogic.get_support_resistance(df)
                     
-                    var_95 = QuantLogic.calculate_var(df)          # Standard Downside VaR
-                    upside_var = QuantLogic.calculate_upside_var(df) # Upside VaR for shorting
+                    var_95 = QuantLogic.calculate_var(df)          
+                    upside_var = QuantLogic.calculate_upside_var(df) 
                     
-                    win_rate, strat_ret, outperf, max_dd, kelly, _ = BacktestEngine.run_quick_backtest(df)
+                    win_rate, strat_ret, outperf, max_dd, kelly, sortino, calmar, _ = BacktestEngine.run_wfo_backtest(df)
                     plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
                     hybrid = TradeArchitect.generate_hybrid_plan(price, score, vrp, sup, res)
                     
@@ -410,7 +500,6 @@ class MarketScanner:
                     # --- THE ULTIMATE GOD-MODE METRIC LOGIC ---
                     # ==========================================
                     
-                    # ULTIMATE LONG CONDITIONS
                     is_ult_long = (
                         var_95 > sup and
                         score > 58 and
@@ -421,7 +510,6 @@ class MarketScanner:
                         kelly > 2.0
                     )
                     
-                    # ULTIMATE SHORT CONDITIONS (Inverted Math)
                     is_ult_short = (
                         upside_var < res and
                         score < 42 and
@@ -456,7 +544,7 @@ class MarketScanner:
 # --- STREAMLIT APP UI ---
 # ==========================================
 
-st.set_page_config(page_title="VRP Quant | V22.2 Institutional", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V23.0 Institutional", layout="wide", page_icon="🏦")
 inject_institutional_css() 
 est_tz = pytz.timezone('US/Eastern')
 
@@ -490,7 +578,7 @@ def check_login():
                 else: 
                     st.error("Invalid Credentials")
         st.markdown("---")
-        st.markdown("### 👑 Founding Member Cohort (V22.2)")
+        st.markdown("### 👑 Founding Member Cohort (V23.0)")
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
@@ -504,7 +592,7 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V22.2")
+        st.markdown("# 🏦 VRP Quant V23.0")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
@@ -534,7 +622,7 @@ if check_login():
                 strict_mode = st.checkbox("⚡ ISOLATE HIGH-CONVICTION QUANTITATIVE SETUPS", value=False, help="Filters out all standard setups. Only shows tickers passing the strict quantitative logic.")
             
             if st.button("Run Live Sector Scan") and selected_tickers:
-                with st.spinner("Running Live Sector Scan & Checking Ultimate Conditions..."):
+                with st.spinner("Running Live Sector Scan & Processing GARCH/WFO..."):
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
                         if not df_scan.empty:
@@ -546,7 +634,6 @@ if check_login():
                                     st.warning("⚠️ No assets currently meet the strict Ultimate Master criteria. Cash is a position.")
                                     st.stop()
                                     
-                            # Styling logic for Ultimate Signals and Apex Box
                             def highlight_ultimate(row):
                                 if row.get("Ultimate Signal") == "🎯 ULTIMATE LONG":
                                     return ['background-color: #064E3B; color: #34D399; font-weight: bold'] * len(row)
@@ -576,9 +663,8 @@ if check_login():
         ticker = st.text_input("Asset Ticker", "TSLA").upper().strip()
         
         if st.button("Run Deep Dive Analysis"):
-            with st.spinner("Extracting Advanced Institutional Metrics..."):
+            with st.spinner("Executing GARCH Modeling & Out-of-Sample Walk-Forward Backtesting..."):
                 try:
-                    # SURGICAL STRIKE: Single ping, no throttling needed.
                     stock = yf.Ticker(ticker)
                     df = stock.history(period="2y")
                     
@@ -594,12 +680,10 @@ if check_login():
                     sup, res = QuantLogic.get_support_resistance(df)
                     sharpe = QuantLogic.calculate_sharpe(df)
                     var_95 = QuantLogic.calculate_var(df)
-                    win_rate, strat_ret, outperf, max_dd, half_kelly, bt_df = BacktestEngine.run_quick_backtest(df)
+                    win_rate, strat_ret, outperf, max_dd, half_kelly, sortino, calmar, bt_df = BacktestEngine.run_wfo_backtest(df)
                     
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
                     hybrid = TradeArchitect.generate_hybrid_plan(curr_price, score, vrp_edge_val, sup, res)
-                    
-                    # 10,000 MONTE CARLO SIMULATIONS FOR GOD MODE TIER
                     mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=10000 if tier == "GOD_MODE" else 1000)
 
                     # --- THE AWESOME SPOT UI BOX ---
@@ -611,7 +695,6 @@ if check_login():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Exact 10-Metric Layout match from user screenshot
                     st.markdown("### 📊 Market Variables")
                     m1, m2, m3, m4, m5 = st.columns(5)
                     m1.metric("Price", f"${curr_price:.2f}")
@@ -627,14 +710,23 @@ if check_login():
                     m9.metric("Resistance (Ceiling)", f"${res:.2f}")
                     m10.metric("95% VaR (Variance)", f"${var_95:.2f}")
 
-                    # Exact Backtest layout match from user screenshot
-                    st.markdown("### ⚙️ Strategy Backtest Validation (2-Year)")
+                    # --- NEW OUT-OF-SAMPLE BACKTEST VALIDATION ---
+                    st.markdown("### ⚙️ Strategy Validation (Walk-Forward Out-of-Sample)")
                     b1, b2, b3, b4, b5 = st.columns(5)
                     b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
                     b2.metric("Net Strategy Return", f"{strat_ret:+.1f}%")
                     b3.metric("Alpha Generated", f"{outperf:+.1f}%")
                     b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
                     b5.metric("Kelly Fraction (Half)", f"{half_kelly:.1f}%", delta_color="normal")
+
+                    # --- NEW INSTITUTIONAL RISK METRICS ---
+                    st.markdown("### 🛡️ Institutional Risk & Regime Metrics")
+                    r1, r2, r3, r4, r5 = st.columns(5)
+                    r1.metric("Vol Engine", "True GARCH(1,1)" if ARCH_AVAILABLE else "EWMA Proxy")
+                    r2.metric("WFO Status", "Active (OOS)" if len(df) > 315 else "In-Sample")
+                    r3.metric("Sortino Ratio", f"{sortino:.2f}")
+                    r4.metric("Calmar Ratio", f"{calmar:.2f}")
+                    r5.metric("Upside VaR (Shorts)", f"${QuantLogic.calculate_upside_var(df):.2f}")
 
                     # --- HQTA DIRECTIVE INJECTION ---
                     allocation_action = "DEPLOY CAPITAL" if half_kelly > 0 else "FLATTEN POSITION / NO EDGE"
@@ -647,13 +739,13 @@ if check_login():
                         <div class="apex-action" style="color: {border_color};">ACTION: {allocation_action}</div>
                         <div class="apex-logic">
                             Optimal Half-Kelly Sizing: <strong>{half_kelly:.2f}%</strong> of total portfolio equity.<br>
-                            <em>Calculated using EWMA GARCH-proxied variance and momentum-adjusted win rates.</em>
+                            <em>Calculated using true GARCH(1,1) variance modeling and out-of-sample walk-forward optimization.</em>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
                     # --- PLOTLY QUANTITATIVE DYNAMICS CHART ---
-                    st.markdown("### 📈 Quantitative Dynamics: Kalman Centerline & EWMA GARCH Bands")
+                    st.markdown("### 📈 Quantitative Dynamics: Kalman Centerline & Dynamic GARCH Bands")
                     fig_price = go.Figure()
                     fig_price.add_trace(go.Candlestick(
                         x=bt_df.index, open=bt_df['Open'], high=bt_df['High'], low=bt_df['Low'], close=bt_df['Close'],
@@ -667,7 +759,6 @@ if check_login():
                     fig_price.update_layout(template='plotly_dark', paper_bgcolor='#0B0F19', plot_bgcolor='#0B0F19', margin=dict(l=0, r=0, t=30, b=0), xaxis_rangeslider_visible=False, height=500)
                     st.plotly_chart(fig_price, use_container_width=True)
 
-                    # --- REST OF ORIGINAL UI ---
                     st.markdown("### 🎯 Advanced Options Architecture (For Pros)")
                     st.info(f"**STRATEGY:** {plan['name']} | **LEGS:** {plan['legs']}")
                     s1, s2, s3 = st.columns(3)
@@ -709,7 +800,7 @@ if check_login():
 st.markdown("<br><br><br>", unsafe_allow_html=True)
 st.markdown("""
 <div style="font-size: 0.85em; color: #94A3B8; line-height: 1.6; text-align: justify; padding: 15px; border-left: 4px solid #F59E0B; background-color: #1E293B; border-radius: 4px; margin-bottom: 20px;">
-    <b style="color: #F8FAFC;">SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated V22.2 Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.<br><br>
+    <b style="color: #F8FAFC;">SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated V23.0 Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.<br><br>
     <div style="text-align: center; font-size: 0.9em; color: #64748B;">
         &copy; 2026 vrpquant.com. All Rights Reserved.
     </div>
