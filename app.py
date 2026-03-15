@@ -536,39 +536,57 @@ class OptionsExpectedMove:
             return 0, 0, 0
 
 class SectorStrengthEngine:
+    # SPDR ETFs & Proxies used to gauge institutional capital flow across all 11 Sectors + Mag 7
     SECTOR_ETFS = {
-        "Technology": "XLK",
-        "Financials": "XLF",
-        "Energy": "XLE",
-        "Healthcare": "XLV",
-        "Industrials": "XLI"
+        "🔥 Magnificent 7 + Crypto": "QQQ",  # Proxy for High-Beta Mega-Cap Tech
+        "💻 Semiconductors (AI)": "SMH",
+        "🛢️ Energy & Commodities": "XLE",
+        "🏥 Healthcare & Biotech": "XLV",
+        "🏦 Financials & Banking": "XLF",
+        "🏭 Industrials & Defense": "XLI",
+        "🛒 Consumer Discretionary": "XLY",
+        "🧼 Consumer Staples": "XLP",
+        "🏠 Real Estate (REITs)": "XLRE",
+        "🔌 Utilities": "XLU",
+        "📡 Communications & Media": "XLC"
     }
 
     @staticmethod
     @st.cache_data(ttl=3600, show_spinner=False)
     def get_strongest_sector():
+        """Calculates 20-Day ROC for sector ETFs to auto-detect capital rotation."""
         try:
             returns = {}
             for sector, etf in SectorStrengthEngine.SECTOR_ETFS.items():
                 df = yf.Ticker(etf).history(period="1mo")
                 if not df.empty and len(df) > 15:
+                    # 20-day Rate of Change (Momentum)
                     roc = (df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1
                     returns[sector] = roc
 
             if returns:
+                # Find the sector with the highest ROC
                 best_sector = max(returns, key=returns.get)
                 return best_sector, returns[best_sector]
-            return "Technology", 0.0 
+            
+            return "💻 Semiconductors (AI)", 0.0 # Fallback if API fails
         except:
-            return "Technology", 0.0 
+            return "💻 Semiconductors (AI)", 0.0 # Fallback 
 
 class UniverseEngine:
+    # The Full Institutional 11-Sector + Mag 7 Dictionary
     SECTOR_UNIVERSE = {
-        "Technology": ["NVDA","AMD","AVGO","TSM","INTC","QCOM","MU","ASML","ADBE","CRM","NOW","SNOW","PANW","CRWD","ZS","ORCL","IBM","TXN","ADI","AMAT","LRCX","KLAC"],
-        "Financials": ["JPM","BAC","GS","MS","C","WFC","BLK","SCHW","AXP","SPGI","ICE","CME","COF","BK","USB","PNC","TFC","AIG","MET","PRU"],
-        "Energy": ["XOM","CVX","COP","SLB","EOG","PSX","MPC","VLO","HAL","OXY","BKR","DVN","FANG","KMI","WMB","OKE","TRGP"],
-        "Healthcare": ["LLY","JNJ","MRK","ABBV","PFE","TMO","DHR","BMY","AMGN","VRTX","GILD","REGN","ISRG","SYK","ZTS","BDX"],
-        "Industrials": ["GE","CAT","DE","BA","HON","RTX","LMT","NOC","GD","ETN","EMR","PH","ITW","CMI","ROK","OTIS"]
+        "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA", "BTC-USD"],
+        "💻 Semiconductors (AI)": ["NVDA", "AMD", "TSM", "INTC", "MU", "AVGO", "QCOM", "ARM", "AMAT", "SMH"],
+        "🛢️ Energy & Commodities": ["XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "XLE"],
+        "🏥 Healthcare & Biotech": ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "XLV"],
+        "🏦 Financials & Banking": ["JPM", "BAC", "WFC", "MS", "GS", "C", "V", "MA", "AXP", "XLF"],
+        "🏭 Industrials & Defense": ["GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "XLI"],
+        "🛒 Consumer Discretionary": ["TSLA", "AMZN", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "XLY"],
+        "🧼 Consumer Staples": ["WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "XLP"],
+        "🏠 Real Estate (REITs)": ["AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "XLRE"],
+        "🔌 Utilities": ["NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "XLU"],
+        "📡 Communications & Media": ["META", "GOOGL", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "XLC"]
     }
 
 class DynamicUniverseEngine:
