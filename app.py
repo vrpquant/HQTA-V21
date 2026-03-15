@@ -535,10 +535,15 @@ class OptionsExpectedMove:
         except:
             return 0, 0, 0
 
+# ==========================================
+# --- V30 SECTOR STRENGTH ENGINE ---
+# ==========================================
+
 class SectorStrengthEngine:
-    # SPDR ETFs & Proxies used to gauge institutional capital flow across all 11 Sectors + Mag 7
+    # SPDR ETFs & Proxies used to gauge institutional capital flow
     SECTOR_ETFS = {
-        "🔥 Magnificent 7 + Crypto": "QQQ",  # Proxy for High-Beta Mega-Cap Tech
+        "🔥 Magnificent 7 + BTC": "MAGS", # The Roundhill Magnificent Seven ETF proxy
+        "🪙 Digital Assets & Proxies": "WGMI", # Bitcoin Miners Proxy
         "💻 Semiconductors (AI)": "SMH",
         "🛢️ Energy & Commodities": "XLE",
         "🏥 Healthcare & Biotech": "XLV",
@@ -560,23 +565,26 @@ class SectorStrengthEngine:
             for sector, etf in SectorStrengthEngine.SECTOR_ETFS.items():
                 df = yf.Ticker(etf).history(period="1mo")
                 if not df.empty and len(df) > 15:
-                    # 20-day Rate of Change (Momentum)
                     roc = (df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1
                     returns[sector] = roc
 
             if returns:
-                # Find the sector with the highest ROC
                 best_sector = max(returns, key=returns.get)
                 return best_sector, returns[best_sector]
             
-            return "💻 Semiconductors (AI)", 0.0 # Fallback if API fails
+            return "💻 Semiconductors (AI)", 0.0 
         except:
-            return "💻 Semiconductors (AI)", 0.0 # Fallback 
+            return "💻 Semiconductors (AI)", 0.0 
+
+# ==========================================
+# --- V30 DYNAMIC SECTOR UNIVERSE ENGINE ---
+# ==========================================
 
 class UniverseEngine:
-    # The Full Institutional 11-Sector + Mag 7 Dictionary
+    # The Full Institutional Dictionary (Corrected Mag 7)
     SECTOR_UNIVERSE = {
-        "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA", "BTC-USD"],
+        "🔥 Magnificent 7 + BTC": ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "BTC-USD"],
+        "🪙 Digital Assets & Proxies": ["COIN", "MSTR", "MARA", "RIOT", "CLSK", "HUT", "IBIT"],
         "💻 Semiconductors (AI)": ["NVDA", "AMD", "TSM", "INTC", "MU", "AVGO", "QCOM", "ARM", "AMAT", "SMH"],
         "🛢️ Energy & Commodities": ["XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "XLE"],
         "🏥 Healthcare & Biotech": ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "XLV"],
