@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 from scipy.stats import norm
 from datetime import datetime
 import pytz
-import os
 import time
 
 # --- NEW: ARCH LIBRARY FOR TRUE GARCH(1,1) ---
@@ -51,23 +50,6 @@ def inject_institutional_css():
     """, unsafe_allow_html=True)
 
 # ==========================================
-# --- GLOBAL INSTITUTIONAL UNIVERSE ---
-# ==========================================
-TICKER_SETS = {
-    "🔥 Magnificent 7 + Crypto": ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "COIN", "MSTR", "MARA", "BTC-USD"],
-    "💻 Semiconductors (AI)": ["NVDA", "AMD", "TSM", "INTC", "MU", "AVGO", "QCOM", "ARM", "AMAT", "SMH"],
-    "🛢️ Energy & Commodities": ["XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "XLE"],
-    "🏥 Healthcare & Biotech": ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "XLV"],
-    "🏦 Financials & Banking": ["JPM", "BAC", "WFC", "MS", "GS", "C", "V", "MA", "AXP", "XLF"],
-    "🏭 Industrials & Defense": ["GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "XLI"],
-    "🛒 Consumer Discretionary": ["TSLA", "AMZN", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "XLY"],
-    "🧼 Consumer Staples": ["WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "XLP"],
-    "🏠 Real Estate (REITs)": ["AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "XLRE"],
-    "🔌 Utilities": ["NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "XLU"],
-    "📡 Communications & Media": ["META", "GOOGL", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "XLC"]
-}
-
-# ==========================================
 # --- ADVANCED INSTITUTIONAL MATH ENGINE ---
 # ==========================================
 class AlphaEngine:
@@ -89,7 +71,6 @@ class AlphaEngine:
 
     @staticmethod
     def apply_garch(returns):
-        """Replaces EWMA proxy with True GARCH(1,1) if available"""
         if ARCH_AVAILABLE and len(returns.dropna()) > 50:
             try:
                 scaled_rets = returns.dropna() * 100
@@ -99,7 +80,6 @@ class AlphaEngine:
                 return pd.Series(cond_vol, index=scaled_rets.index) * np.sqrt(252)
             except:
                 pass
-        # Fallback to EWMA if ARCH fails or is uninstalled
         return returns.ewm(span=20).std() * np.sqrt(252)
 
     @staticmethod
@@ -111,9 +91,7 @@ class AlphaEngine:
             calc_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(calc_df['Close'])
             returns = calc_df['Close'].pct_change().fillna(0)
             
-            # --- TRUE GARCH INJECTION ---
             calc_df['GARCH_Vol'] = AlphaEngine.apply_garch(returns)
-            
             calc_df['Band_Std'] = calc_df['GARCH_Vol'] * calc_df['Kalman_Price'] / np.sqrt(252)
             calc_df['Upper_Band'] = calc_df['Kalman_Price'] + (2 * calc_df['Band_Std'])
             calc_df['Lower_Band'] = calc_df['Kalman_Price'] - (2 * calc_df['Band_Std'])
@@ -137,7 +115,6 @@ class AlphaEngine:
 class BacktestEngine:
     @staticmethod
     def run_wfo_backtest(df, slippage_bps=5, commission_bps=2):
-        """Walk-Forward Optimization (WFO) Backtesting Engine"""
         try:
             bt_df = df.copy().dropna()
             if len(bt_df) < 50:
@@ -145,19 +122,15 @@ class BacktestEngine:
                 
             bt_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(bt_df['Close'])
             returns = bt_df['Close'].pct_change().fillna(0)
-            
-            # --- TRUE GARCH INJECTION ---
             bt_df['Vol_Regime'] = AlphaEngine.apply_garch(returns)
             bt_df['Underlying_Return'] = returns
             
-            # WFO Parameters
-            train_size = 252 # Train on 1 Year
-            step_size = 63   # Test out-of-sample on 3 Months
-            multipliers = [1.5, 2.0, 2.5] # Dynamic Band Multipliers
+            train_size = 252 
+            step_size = 63   
+            multipliers = [1.5, 2.0, 2.5] 
             
             oos_positions = pd.Series(0.0, index=bt_df.index)
             
-            # Perform Walk-Forward Optimization if we have enough data
             if len(bt_df) > train_size + step_size:
                 for start_idx in range(0, len(bt_df) - train_size, step_size):
                     train_end = start_idx + train_size
@@ -167,7 +140,6 @@ class BacktestEngine:
                     best_sharpe = -999
                     best_mult = 2.0
                     
-                    # 1. Train Strategy Parameters (In-Sample)
                     for m in multipliers:
                         band_std = train_df['Vol_Regime'] * train_df['Kalman_Price'] / np.sqrt(252)
                         upper = train_df['Kalman_Price'] + (m * band_std)
@@ -185,7 +157,6 @@ class BacktestEngine:
                             best_sharpe = sharpe
                             best_mult = m
                             
-                    # 2. Test Strategy Parameters (Out-of-Sample)
                     test_df = bt_df.iloc[train_end:test_end]
                     band_std_oos = test_df['Vol_Regime'] * test_df['Kalman_Price'] / np.sqrt(252)
                     upper_oos = test_df['Kalman_Price'] + (best_mult * band_std_oos)
@@ -199,7 +170,6 @@ class BacktestEngine:
                     
                 bt_df['Target_Position'] = oos_positions
             else:
-                # Fallback to IS if data is too short
                 band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
                 bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * band_std)
                 bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * band_std)
@@ -216,7 +186,6 @@ class BacktestEngine:
             total_cost = (slippage_bps + commission_bps) / 10000
             bt_df['Net_Return'] = bt_df['Gross_Return'] - (turnover * total_cost * (1 + (bt_df['Vol_Regime'] > 0.35).astype(int)))
             
-            # --- CALCULATE METRICS ON OUT-OF-SAMPLE ONLY ---
             eval_df = bt_df.iloc[train_size:] if len(bt_df) > train_size + step_size else bt_df
             
             win_rate = (eval_df['Net_Return'] > 0).mean() * 100
@@ -227,7 +196,6 @@ class BacktestEngine:
             peak = (1 + eval_df['Net_Return']).cumprod().cummax()
             max_dd = (((1 + eval_df['Net_Return']).cumprod() - peak) / peak).min() * 100
             
-            # Institutional Risk Metrics Addition
             ann_return = eval_df['Net_Return'].mean() * 252
             downside_std = eval_df[eval_df['Net_Return'] < 0]['Net_Return'].std() * np.sqrt(252)
             sortino = ann_return / (downside_std + 1e-9)
@@ -241,12 +209,10 @@ class BacktestEngine:
                 win_avg = wins.mean()
                 loss_avg = abs(losses.mean())
                 win_prob = len(wins) / (len(wins) + len(losses))
-                
                 if loss_avg > 0:
                     kelly_fraction = win_prob - ((1 - win_prob) / (win_avg / loss_avg))
                     half_kelly = max(0.0, kelly_fraction / 2.0) * 100 
             
-            # Append standard 2.0 band multiplier for aesthetic UI chart rendering
             last_band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
             bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * last_band_std)
             bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * last_band_std)
@@ -320,7 +286,6 @@ class QuantLogic:
         
     @staticmethod
     def calculate_var(df, confidence=0.95):
-        """Standard 95% Downside Value at Risk"""
         try:
             price = df['Close'].iloc[-1]
             daily_returns = df['Close'].pct_change().dropna()
@@ -331,7 +296,6 @@ class QuantLogic:
 
     @staticmethod
     def calculate_upside_var(df, confidence=0.95):
-        """95% Upside Variance (Used for sizing Short positions below Resistance)"""
         try:
             price = df['Close'].iloc[-1]
             daily_returns = df['Close'].pct_change().dropna()
@@ -448,7 +412,6 @@ class TradeArchitect:
             hybrid['name'] = "The Floor-to-Ceiling Swing (Mean Reversion)"
             hybrid['action'] = f"Place Limit Buy Order for Shares @ ${sup:.2f} AND Set Sell Target @ ${res:.2f}."
             hybrid['logic'] = "Stock is trapped in a channel. We refuse to buy at current prices. We set traps at the floor and sell at the ceiling."
-            
         return hybrid
 
 class MonteCarloEngine:
@@ -472,79 +435,221 @@ class MonteCarloEngine:
         except:
             return pd.DataFrame(np.tile(df['Close'].iloc[-1], (days+1, sims)))
 
+class PortfolioEngine:
+    @staticmethod
+    def cross_sectional_momentum(price_dict):
+        try:
+            returns = {t: df['Close'].pct_change(20).iloc[-1] for t, df in price_dict.items()}
+            ranks = pd.Series(returns).rank(pct=True)
+            return ranks.to_dict()
+        except:
+            return {t: 0.5 for t in price_dict.keys()}
+
+    @staticmethod
+    def volatility_targeting(df, target_vol=0.20):
+        try:
+            realized = df['Close'].pct_change().std() * np.sqrt(252)
+            weight = target_vol / (realized + 1e-9)
+            return min(2.0, max(0.0, weight))
+        except:
+            return 1.0
+
+    @staticmethod
+    def mean_variance_weight(price_dict):
+        try:
+            returns = pd.DataFrame({t: df['Close'].pct_change() for t, df in price_dict.items()}).dropna()
+            cov = returns.cov()
+            inv = np.linalg.pinv(cov.values)
+            ones = np.ones(len(inv))
+            weights = inv @ ones / (ones.T @ inv @ ones)
+            return dict(zip(returns.columns, weights))
+        except:
+            return {t: 1/len(price_dict) for t in price_dict}
+
+    @staticmethod
+    def kelly_weight(df):
+        try:
+            r = df['Close'].pct_change().dropna()
+            mu = r.mean() * 252
+            var = r.var() * 252
+            kelly = mu / (var + 1e-9)
+            return max(0, min(kelly, 2))
+        except:
+            return 0.0
+
+class RegimeEngine:
+    @staticmethod
+    @st.cache_data(ttl=900)
+    def detect_regime():
+        try:
+            spy = yf.Ticker("SPY").history(period="1y")
+            vix = yf.Ticker("^VIX").history(period="6mo")
+            spy_close = spy['Close']
+            vix_level = vix['Close'].iloc[-1]
+
+            ma50 = spy_close.rolling(50).mean().iloc[-1]
+            ma200 = spy_close.rolling(200).mean().iloc[-1]
+            price = spy_close.iloc[-1]
+            momentum = spy_close.pct_change(60).iloc[-1]
+
+            if price > ma50 > ma200 and vix_level < 20 and momentum > 0:
+                return "Risk-On"
+            elif price < ma200 and vix_level > 25:
+                return "Risk-Off"
+            else:
+                return "Neutral"
+        except Exception as e:
+            return "Neutral"
+
+class OptionsExpectedMove:
+    @staticmethod
+    def calculate(ticker, current_price):
+        try:
+            tk = yf.Ticker(ticker)
+            expirations = tk.options
+
+            if len(expirations) == 0:
+                return 0, 0, 0
+
+            nearest_exp = expirations[0]
+            time.sleep(0.5) 
+            chain = tk.option_chain(nearest_exp)
+            
+            calls = chain.calls
+            puts = chain.puts
+
+            calls['diff'] = abs(calls['strike'] - current_price)
+            atm_call = calls.sort_values('diff').iloc[0]
+
+            puts['diff'] = abs(puts['strike'] - current_price)
+            atm_put = puts.sort_values('diff').iloc[0]
+
+            call_price = atm_call['lastPrice']
+            put_price = atm_put['lastPrice']
+
+            expected_move = call_price + put_price
+            upper = current_price + expected_move
+            lower = current_price - expected_move
+
+            return expected_move, upper, lower
+        except:
+            return 0, 0, 0
+
+class SectorStrengthEngine:
+    SECTOR_ETFS = {
+        "Technology": "XLK",
+        "Financials": "XLF",
+        "Energy": "XLE",
+        "Healthcare": "XLV",
+        "Industrials": "XLI"
+    }
+
+    @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def get_strongest_sector():
+        try:
+            returns = {}
+            for sector, etf in SectorStrengthEngine.SECTOR_ETFS.items():
+                df = yf.Ticker(etf).history(period="1mo")
+                if not df.empty and len(df) > 15:
+                    roc = (df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1
+                    returns[sector] = roc
+
+            if returns:
+                best_sector = max(returns, key=returns.get)
+                return best_sector, returns[best_sector]
+            return "Technology", 0.0 
+        except:
+            return "Technology", 0.0 
+
+class UniverseEngine:
+    SECTOR_UNIVERSE = {
+        "Technology": ["NVDA","AMD","AVGO","TSM","INTC","QCOM","MU","ASML","ADBE","CRM","NOW","SNOW","PANW","CRWD","ZS","ORCL","IBM","TXN","ADI","AMAT","LRCX","KLAC"],
+        "Financials": ["JPM","BAC","GS","MS","C","WFC","BLK","SCHW","AXP","SPGI","ICE","CME","COF","BK","USB","PNC","TFC","AIG","MET","PRU"],
+        "Energy": ["XOM","CVX","COP","SLB","EOG","PSX","MPC","VLO","HAL","OXY","BKR","DVN","FANG","KMI","WMB","OKE","TRGP"],
+        "Healthcare": ["LLY","JNJ","MRK","ABBV","PFE","TMO","DHR","BMY","AMGN","VRTX","GILD","REGN","ISRG","SYK","ZTS","BDX"],
+        "Industrials": ["GE","CAT","DE","BA","HON","RTX","LMT","NOC","GD","ETN","EMR","PH","ITW","CMI","ROK","OTIS"]
+    }
+
+class DynamicUniverseEngine:
+    @staticmethod
+    def get_apex_10():
+        return ["SPY", "QQQ", "NVDA", "TSLA", "MSTR", "COIN", "AAPL", "AMD", "AMZN", "META"]
+
 class MarketScanner:
     @staticmethod
     @st.cache_data(ttl=900, show_spinner=False)
     def run_scan(tickers):
+        regime = RegimeEngine.detect_regime()
         results = []
+        price_dict = {}
+
         for t in tickers:
             try:
                 stock = yf.Ticker(t)
                 df = stock.history(period="2y")
-                if len(df) > 50:
-                    price = df['Close'].iloc[-1]
-                    score = AlphaEngine.calculate_score(df)
-                    vol = QuantLogic.calculate_vol(df)
-                    vrp = QuantLogic.calculate_vrp_edge(t, df, mode="scanner")
-                    reversal = QuantLogic.detect_reversal(df)
-                    sup, res = QuantLogic.get_support_resistance(df)
-                    
-                    var_95 = QuantLogic.calculate_var(df)          
-                    upside_var = QuantLogic.calculate_upside_var(df) 
-                    
-                    win_rate, strat_ret, outperf, max_dd, kelly, sortino, calmar, _ = BacktestEngine.run_wfo_backtest(df)
-                    plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
-                    hybrid = TradeArchitect.generate_hybrid_plan(price, score, vrp, sup, res)
-                    
-                    # ==========================================
-                    # --- THE ULTIMATE GOD-MODE METRIC LOGIC ---
-                    # ==========================================
-                    
-                    is_ult_long = (
-                        var_95 > sup and
-                        score > 58 and
-                        ("Bullish" in plan['bias'] or "Bear Rejection" in reversal) and
-                        vrp < 0 and
-                        win_rate > 10.0 and
-                        strat_ret > 50.0 and
-                        kelly > 2.0
-                    )
-                    
-                    is_ult_short = (
-                        upside_var < res and
-                        score < 42 and
-                        ("Bearish" in plan['bias'] or "Bull Bounce" in reversal) and
-                        vrp > 0 and 
-                        win_rate > 10.0 and
-                        strat_ret > 50.0 and 
-                        kelly > 2.0
-                    )
-
-                    ultimate_signal = "🎯 ULTIMATE LONG" if is_ult_long else "🩸 ULTIMATE SHORT" if is_ult_short else "Standard"
-
-                    results.append({
-                        "Ticker": t, "Price": round(price,2), "Ultimate Signal": ultimate_signal,
-                        "Alpha Score": score, "Trend": plan['bias'],
-                        "Reversal": reversal, "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%", 
-                        "Support": round(sup,2), "Resistance": round(res,2), 
-                        "HQTA Apex Action": hybrid['action'],
-                        "Strategy": plan['name'], "Kelly": f"{kelly}%"
-                    })
                 
-                time.sleep(1.5)
-            except Exception as e:
+                if len(df) > 100:
+                    avg_vol = df['Volume'].tail(30).mean()
+                    daily_vol = df['Close'].pct_change().std()
+                    
+                    if avg_vol > 1_000_000 and daily_vol > 0.02:
+                        price_dict[t] = df
+                        
+                time.sleep(1.5) 
+            except:
                 pass
-        
+
+        if not price_dict:
+            return pd.DataFrame()
+
+        cs_rank = PortfolioEngine.cross_sectional_momentum(price_dict)
+        mvo_weights = PortfolioEngine.mean_variance_weight(price_dict)
+
+        for t, df in price_dict.items():
+            try:
+                price = df['Close'].iloc[-1]
+                score = AlphaEngine.calculate_score(df)
+                vol = QuantLogic.calculate_vol(df)
+                vrp = QuantLogic.calculate_vrp_edge(t, df, mode="scanner")
+                reversal = QuantLogic.detect_reversal(df)
+                sup, res = QuantLogic.get_support_resistance(df)
+                
+                win_rate, strat_ret, outperf, max_dd, kelly, sortino, calmar, _ = BacktestEngine.run_wfo_backtest(df)
+                plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
+                hybrid = TradeArchitect.generate_hybrid_plan(price, score, vrp, sup, res)
+                move, exp_upper, exp_lower = OptionsExpectedMove.calculate(t, price)
+
+                cs = cs_rank.get(t, 0.5)
+                vol_target = PortfolioEngine.volatility_targeting(df)
+                mvo = mvo_weights.get(t, 0)
+                kelly_port = PortfolioEngine.kelly_weight(df)
+
+                ultimate_score = (score * 0.35 + cs * 100 * 0.20 + kelly_port * 50 * 0.15 + vol_target * 50 * 0.15 + mvo * 50 * 0.15)
+
+                is_long = (regime != "Risk-Off" and ultimate_score > 65 and vrp < 0 and win_rate > 10 and strat_ret > 50)
+                is_short = (ultimate_score < 35 and vrp > 0 and win_rate > 10 and strat_ret > 50)
+                ultimate_signal = "🎯 ULTIMATE LONG" if is_long else "🩸 ULTIMATE SHORT" if is_short else "Standard"
+
+                results.append({
+                    "Ticker": t, "Price": round(price, 2), "Ultimate Signal": ultimate_signal,
+                    "Alpha Score": score, "Trend": plan['bias'], "Options Exp Move": round(move, 2),
+                    "Options Upper": round(exp_upper, 2), "Options Lower": round(exp_lower, 2),
+                    "Reversal": reversal, "VRP Edge": f"{vrp:+.1f}%", "Vol": f"{vol:.1f}%",
+                    "Support": round(sup, 2), "Resistance": round(res, 2), "HQTA Apex Action": hybrid['action'],
+                    "Strategy": plan['name'], "Kelly": f"{kelly}%"
+                })
+            except:
+                pass
+
         df_results = pd.DataFrame(results)
-        if df_results.empty:
-            return df_results
-        return df_results.sort_values("Alpha Score", ascending=False)
+        if df_results.empty: return df_results
+        return df_results.sort_values("Alpha Score", ascending=False).head(10)
 
 # ==========================================
 # --- STREAMLIT APP UI ---
 # ==========================================
-
-st.set_page_config(page_title="VRP Quant | V23.0 Institutional", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V30 Institutional", layout="wide", page_icon="🏦")
 inject_institutional_css() 
 est_tz = pytz.timezone('US/Eastern')
 
@@ -554,9 +659,6 @@ except Exception as e:
     st.error("⚠️ SYSTEM LOCKED: Security vault not connected. Please configure [credentials] in Streamlit Secrets.")
     st.stop()
 
-# ==========================================
-# --- PAYMENT GATEWAY LINKS ---
-# ==========================================
 PAYPAL_ANALYST_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-0CB63794C10515154NGMNDNA" 
 PAYPAL_GOD_MODE_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-723423746M676015CNGMNFGI"
 
@@ -578,7 +680,7 @@ def check_login():
                 else: 
                     st.error("Invalid Credentials")
         st.markdown("---")
-        st.markdown("### 👑 Founding Member Cohort (V23.0)")
+        st.markdown("### 👑 Founding Member Cohort (V30.0)")
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
@@ -592,7 +694,7 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V23.0")
+        st.markdown("# 🏦 VRP Quant V30.0")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
@@ -601,40 +703,49 @@ if check_login():
     if mode == "🚀 Market Scanner":
         st.title("🚀 Institutional Market Scanner")
         
+        regime = RegimeEngine.detect_regime()
+        st.markdown(f"### 🌍 Market Regime: **{regime}**")
+        st.markdown("---")
+        
         if tier != "GOD_MODE":
             st.error("🔒 ACCESS DENIED: Market Scanner is locked for Analyst Tier.")
         else:
             st.markdown("### ⚡ Live Sector Scanner")
             col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
-                options = list(TICKER_SETS.keys()) + ["✨ Custom Watchlist"]
+                options = ["🤖 Auto-Detect Strongest Sector", "🌌 Dynamic Apex 10 (Max Liquidity)"] + list(UniverseEngine.SECTOR_UNIVERSE.keys()) + ["✨ Custom Watchlist"]
                 sector_choice = st.selectbox("Select Sector to Scan:", options)
             
             selected_tickers = []
-            if sector_choice == "✨ Custom Watchlist":
+            if sector_choice == "🤖 Auto-Detect Strongest Sector":
+                with st.spinner("Analyzing Macro Capital Rotation via SPDR ETFs..."):
+                    best_sector, sector_roc = SectorStrengthEngine.get_strongest_sector()
+                    selected_tickers = UniverseEngine.SECTOR_UNIVERSE[best_sector]
+                    st.info(f"🔄 **Auto-Rotation Triggered:** The engine detected institutional capital flowing into **{best_sector}** (20-Day ROC: +{sector_roc*100:.2f}%). Targeting {len(selected_tickers)} underlying assets.")
+            elif sector_choice == "✨ Custom Watchlist":
                 with col2:
                     custom_input = st.text_area("Enter Tickers:", "PLTR, SOFI")
                     if custom_input: selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
-            else: selected_tickers = TICKER_SETS[sector_choice]
+            elif sector_choice == "🌌 Dynamic Apex 10 (Max Liquidity)":
+                selected_tickers = DynamicUniverseEngine.get_apex_10()
+            else: 
+                selected_tickers = UniverseEngine.SECTOR_UNIVERSE[sector_choice]
 
             with col3:
                 st.markdown("<br>", unsafe_allow_html=True)
                 strict_mode = st.checkbox("⚡ ISOLATE HIGH-CONVICTION QUANTITATIVE SETUPS", value=False, help="Filters out all standard setups. Only shows tickers passing the strict quantitative logic.")
             
             if st.button("Run Live Sector Scan") and selected_tickers:
-                with st.spinner("Running Live Sector Scan & Processing GARCH/WFO..."):
+                with st.spinner(f"Initiating Stealth Scan & Applying 1M Vol / 31.7% Volatility Gates for {len(selected_tickers)} Assets..."):
                     try:
                         df_scan = MarketScanner.run_scan(selected_tickers)
                         if not df_scan.empty:
-                            
-                            # Filter logic for Ultimate Checkbox
                             if strict_mode:
                                 df_scan = df_scan[df_scan["Ultimate Signal"] != "Standard"]
                                 if df_scan.empty:
                                     st.warning("⚠️ No assets currently meet the strict Ultimate Master criteria. Cash is a position.")
                                     st.stop()
                                     
-                            # --- INSTITUTIONAL-GRADE HTML TABLE RENDERING ---
                             def render_institutional_html_table(df):
                                 html = """
                                 <style>
@@ -658,55 +769,38 @@ if check_login():
                                 </style>
                                 <div class="table-container">
                                 <table class="inst-table">
-                                    <thead>
-                                        <tr>
+                                    <thead><tr>
                                 """
-                                # Add Headers
-                                for col in df.columns:
-                                    html += f"<th>{col}</th>"
+                                for col in df.columns: html += f"<th>{col}</th>"
                                 html += "</tr></thead><tbody>"
                                 
-                                # Add Rows and Custom Styles
                                 for _, row in df.iterrows():
                                     html += "<tr>"
                                     for col in df.columns:
                                         val = row[col]
-                                        if col == "Ticker":
-                                            html += f"<td class='ticker-cell'>{val}</td>"
+                                        if col == "Ticker": html += f"<td class='ticker-cell'>{val}</td>"
                                         elif col == "Ultimate Signal":
-                                            if val == "🎯 ULTIMATE LONG":
-                                                html += f"<td><span class='badge-long'>{val}</span></td>"
-                                            elif val == "🩸 ULTIMATE SHORT":
-                                                html += f"<td><span class='badge-short'>{val}</span></td>"
-                                            else:
-                                                html += f"<td><span class='badge-std'>{val}</span></td>"
-                                        elif col == "HQTA Apex Action":
-                                            html += f"<td class='apex-cell'>{val}</td>"
+                                            if val == "🎯 ULTIMATE LONG": html += f"<td><span class='badge-long'>{val}</span></td>"
+                                            elif val == "🩸 ULTIMATE SHORT": html += f"<td><span class='badge-short'>{val}</span></td>"
+                                            else: html += f"<td><span class='badge-std'>{val}</span></td>"
+                                        elif col == "HQTA Apex Action": html += f"<td class='apex-cell'>{val}</td>"
                                         elif col == "VRP Edge":
-                                            if isinstance(val, str) and val.startswith("+"):
-                                                html += f"<td class='val-pos'>{val}</td>"
-                                            elif isinstance(val, str) and val.startswith("-"):
-                                                html += f"<td class='val-neg'>{val}</td>"
-                                            else:
-                                                html += f"<td>{val}</td>"
+                                            if isinstance(val, str) and val.startswith("+"): html += f"<td class='val-pos'>{val}</td>"
+                                            elif isinstance(val, str) and val.startswith("-"): html += f"<td class='val-neg'>{val}</td>"
+                                            else: html += f"<td>{val}</td>"
                                         elif col == "Trend":
-                                            if isinstance(val, str) and "LONG" in val:
-                                                html += f"<td class='val-pos'>{val}</td>"
-                                            elif isinstance(val, str) and "SHORT" in val:
-                                                html += f"<td class='val-neg'>{val}</td>"
-                                            else:
-                                                html += f"<td class='val-neu'>{val}</td>"
-                                        else:
-                                            html += f"<td>{val}</td>"
+                                            if isinstance(val, str) and "LONG" in val: html += f"<td class='val-pos'>{val}</td>"
+                                            elif isinstance(val, str) and "SHORT" in val: html += f"<td class='val-neg'>{val}</td>"
+                                            else: html += f"<td class='val-neu'>{val}</td>"
+                                        else: html += f"<td>{val}</td>"
                                     html += "</tr>"
-                                    
                                 html += "</tbody></table></div>"
                                 return html
 
-                            # Render the raw HTML directly to the UI
                             html_table = render_institutional_html_table(df_scan)
                             st.markdown(html_table, unsafe_allow_html=True)
-                            
+                        else:
+                            st.warning("⚠️ No tickers in this sector passed the 1M Volume and 31.7% Annualized Volatility gates.")
                     except Exception as e:
                         st.error(f"Scan failed: {e}")
 
@@ -738,7 +832,6 @@ if check_login():
                     hybrid = TradeArchitect.generate_hybrid_plan(curr_price, score, vrp_edge_val, sup, res)
                     mc_df = MonteCarloEngine.simulate_paths(df, days=30, sims=10000 if tier == "GOD_MODE" else 1000)
 
-                    # --- THE AWESOME SPOT UI BOX ---
                     st.markdown(f"""
                     <div class="apex-box">
                         <div class="apex-title">🏆 THE AWESOME SPOT: {hybrid['name']}</div>
@@ -762,7 +855,6 @@ if check_login():
                     m9.metric("Resistance (Ceiling)", f"${res:.2f}")
                     m10.metric("95% VaR (Variance)", f"${var_95:.2f}")
 
-                    # --- NEW OUT-OF-SAMPLE BACKTEST VALIDATION ---
                     st.markdown("### ⚙️ Strategy Validation (Walk-Forward Out-of-Sample)")
                     b1, b2, b3, b4, b5 = st.columns(5)
                     b1.metric("Historical Win Rate", f"{win_rate:.1f}%")
@@ -771,7 +863,6 @@ if check_login():
                     b4.metric("Markdown % (Max DD)", f"{max_dd:.1f}%", delta_color="inverse")
                     b5.metric("Kelly Fraction (Half)", f"{half_kelly:.1f}%", delta_color="normal")
 
-                    # --- NEW INSTITUTIONAL RISK METRICS ---
                     st.markdown("### 🛡️ Institutional Risk & Regime Metrics")
                     r1, r2, r3, r4, r5 = st.columns(5)
                     r1.metric("Vol Engine", "True GARCH(1,1)" if ARCH_AVAILABLE else "EWMA Proxy")
@@ -780,7 +871,6 @@ if check_login():
                     r4.metric("Calmar Ratio", f"{calmar:.2f}")
                     r5.metric("Upside VaR (Shorts)", f"${QuantLogic.calculate_upside_var(df):.2f}")
 
-                    # --- HQTA DIRECTIVE INJECTION ---
                     allocation_action = "DEPLOY CAPITAL" if half_kelly > 0 else "FLATTEN POSITION / NO EDGE"
                     box_color = "#082F49" if half_kelly > 0 else "#450a0a"
                     border_color = "#38BDF8" if half_kelly > 0 else "#f87171"
@@ -796,7 +886,6 @@ if check_login():
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # --- PLOTLY QUANTITATIVE DYNAMICS CHART ---
                     st.markdown("### 📈 Quantitative Dynamics: Kalman Centerline & Dynamic GARCH Bands")
                     fig_price = go.Figure()
                     fig_price.add_trace(go.Candlestick(
@@ -846,13 +935,10 @@ if check_login():
             st.session_state.authenticated = False
             st.rerun()
 
-# ==========================================
-# --- SEC REGULATORY COMPLIANCE FOOTER ---
-# ==========================================
 st.markdown("<br><br><br>", unsafe_allow_html=True)
 st.markdown("""
 <div style="font-size: 0.85em; color: #94A3B8; line-height: 1.6; text-align: justify; padding: 15px; border-left: 4px solid #F59E0B; background-color: #1E293B; border-radius: 4px; margin-bottom: 20px;">
-    <b style="color: #F8FAFC;">SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated V23.0 Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.<br><br>
+    <b style="color: #F8FAFC;">SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b> VRP Quant and its associated Terminal operate strictly as a financial data and analytics publisher. We are not a registered investment advisor, broker-dealer, or financial planner. All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges, N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance levels provided by this platform are for informational and educational purposes only. Past performance does not guarantee future results.<br><br>
     <div style="text-align: center; font-size: 0.9em; color: #64748B;">
         &copy; 2026 vrpquant.com. All Rights Reserved.
     </div>
