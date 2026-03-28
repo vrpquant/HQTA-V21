@@ -3,366 +3,12 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from scipy.stats import norm
 from datetime import datetime
-import pytz
 import time
 
-# --- NEW: ARCH LIBRARY FOR TRUE GARCH(1,1) ---
-try:
-    from arch import arch_model
-    ARCH_AVAILABLE = True
-except ImportError:
-    ARCH_AVAILABLE = False
+from vrp_quant_engine_v30_2_1 import OptionsDataEngine, AlphaEngine, BacktestEngine, QuantLogic, TradeArchitect, RegimeEngine, DynamicUniverseEngine, get_sparkline
 
-# ==========================================
-# --- SMART API THROTTLES (PREVENTS BANS) ---
-# ==========================================
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_history(ticker, period="2y"):
-    """
-    Safely throttles historical API calls on the first run to prevent IP bans.
-    Subsequent runs load from cache in 0.001 seconds.
-    """
-    time.sleep(1.0) 
-    return yf.Ticker(ticker).history(period=period)
-
-@st.cache_data(ttl=900, show_spinner=False)
-def get_option_chain(ticker):
-    """
-    Safely throttles and caches options chain requests.
-    Prevents yfinance bans during the massive Apex sweeps.
-    """
-    time.sleep(0.5) 
-    try:
-        tk = yf.Ticker(ticker)
-        if not tk.options: return None
-        return tk.option_chain(tk.options[0])
-    except:
-        return None
-
-# ==========================================
-# --- INSTITUTIONAL UI THEME INJECTION ---
-# ==========================================
-def inject_institutional_css():
-    st.markdown("""
-    <style>
-        .stApp { background-color: #0B0F19; color: #F8FAFC; }
-        [data-testid="stSidebar"] { background-color: #0F172A; border-right: 1px solid #1E293B; }
-        div[data-testid="metric-container"] {
-            background-color: #1E293B; border: 1px solid #334155;
-            padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-        div[data-testid="metric-container"] label { color: #94A3B8 !important; font-weight: 600 !important; letter-spacing: 0.5px; }
-        div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 1.8rem !important; font-weight: 700 !important; }
-        .apex-box {
-            background-color: #082F49; border-left: 5px solid #38BDF8;
-            border-radius: 5px; padding: 20px; margin-top: 15px; margin-bottom: 25px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-        }
-        .apex-title { color: #BAE6FD; font-size: 1.4em; font-weight: 800; margin-bottom: 10px; }
-        .apex-action { color: #38BDF8; font-size: 1.2em; font-weight: 700; margin-bottom: 10px; }
-        .apex-logic { color: #94A3B8; font-size: 1em; font-style: italic; }
-        h1, h2, h3 { color: #F1F5F9 !important; font-weight: 700 !important; }
-        hr { border-color: #334155 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# ==========================================
-# --- ADVANCED INSTITUTIONAL MATH ENGINE ---
-# ==========================================
-class AlphaEngine:
-    @staticmethod
-    def apply_kalman_filter(prices, noise_estimate=1.0, measure_noise=1.0):
-        n = len(prices)
-        kalman_gains = np.zeros(n)
-        estimates = np.zeros(n)
-        current_estimate = prices.iloc[0]
-        err_estimate = noise_estimate
-        for i in range(n):
-            kalman_gains[i] = err_estimate / (err_estimate + measure_noise)
-            current_estimate = current_estimate + kalman_gains[i] * (prices.iloc[i] - current_estimate)
-            err_estimate = (1 - kalman_gains[i]) * err_estimate
-            estimates[i] = current_estimate
-        return pd.Series(estimates, index=prices.index)
-
-    @staticmethod
-    def apply_garch(returns):
-        if ARCH_AVAILABLE and len(returns.dropna()) > 50:
-            try:
-                scaled_rets = returns.dropna() * 100
-                am = arch_model(scaled_rets, vol='Garch', p=1, q=1, rescale=False)
-                res = am.fit(disp='off', show_warning=False, options={'maxiter': 200})
-                cond_vol = res.conditional_volatility / 100
-                return pd.Series(cond_vol, index=scaled_rets.index) * np.sqrt(252)
-            except:
-                pass
-        return returns.ewm(span=20).std() * np.sqrt(252)
-
-    @staticmethod
-    def calculate_score(df):
-        try:
-            calc_df = df.copy().dropna()
-            if len(calc_df) < 50: return 50
-            calc_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(calc_df['Close'])
-            returns = calc_df['Close'].pct_change().fillna(0)
-            calc_df['GARCH_Vol'] = AlphaEngine.apply_garch(returns)
-            calc_df['Band_Std'] = calc_df['GARCH_Vol'] * calc_df['Kalman_Price'] / np.sqrt(252)
-            calc_df['Upper_Band'] = calc_df['Kalman_Price'] + (2 * calc_df['Band_Std'])
-            calc_df['Lower_Band'] = calc_df['Kalman_Price'] - (2 * calc_df['Band_Std'])
-            calc_df['BBW'] = (calc_df['Upper_Band'] - calc_df['Lower_Band']) / calc_df['Kalman_Price']
-            
-            current_price = calc_df['Close'].iloc[-1]
-            lower_band = calc_df['Lower_Band'].iloc[-1]
-            upper_band = calc_df['Upper_Band'].iloc[-1]
-            kalman_trend = calc_df['Kalman_Price'].iloc[-1] > calc_df['Kalman_Price'].iloc[-2]
-            
-            score = 50 
-            if current_price < lower_band and kalman_trend: score += 35 
-            elif current_price > upper_band: score -= 35
-            bbw_z = (calc_df['BBW'].iloc[-1] - calc_df['BBW'].mean()) / (calc_df['BBW'].std() + 1e-9)
-            score += max(-15, min(15, bbw_z * 10))
-            return max(0, min(100, int(score)))
-        except:
-            return 50
-
-class BacktestEngine:
-    @staticmethod
-    def run_wfo_backtest(df, slippage_bps=5, commission_bps=2):
-        try:
-            bt_df = df.copy().dropna()
-            if len(bt_df) < 50: return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, bt_df
-            bt_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(bt_df['Close'])
-            returns = bt_df['Close'].pct_change().fillna(0)
-            bt_df['Vol_Regime'] = AlphaEngine.apply_garch(returns)
-            bt_df['Underlying_Return'] = returns
-            
-            train_size, step_size = 252, 63   
-            multipliers = [1.5, 2.0, 2.5] 
-            oos_positions = pd.Series(0.0, index=bt_df.index, dtype=float)
-            
-            if len(bt_df) > train_size + step_size:
-                for start_idx in range(0, len(bt_df) - train_size, step_size):
-                    train_end = start_idx + train_size
-                    test_end = min(train_end + step_size, len(bt_df))
-                    train_df = bt_df.iloc[start_idx:train_end]
-                    best_sharpe, best_mult = -999, 2.0
-                    
-                    for m in multipliers:
-                        band_std = train_df['Vol_Regime'] * train_df['Kalman_Price'] / np.sqrt(252)
-                        upper = train_df['Kalman_Price'] + (m * band_std)
-                        lower = train_df['Kalman_Price'] - (m * band_std)
-                        sig = pd.Series(0, index=train_df.index)
-                        sig[train_df['Close'] < lower] = 1
-                        sig[train_df['Close'] > upper] = -1
-                        pos = sig.replace(0, np.nan).ffill().fillna(0).shift(1).fillna(0)
-                        strat_rets = pos * train_df['Underlying_Return']
-                        sharpe = np.sqrt(252) * strat_rets.mean() / (strat_rets.std() + 1e-9)
-                        if sharpe > best_sharpe:
-                            best_sharpe, best_mult = sharpe, m
-                            
-                    test_df = bt_df.iloc[train_end:test_end]
-                    band_std_oos = test_df['Vol_Regime'] * test_df['Kalman_Price'] / np.sqrt(252)
-                    upper_oos = test_df['Kalman_Price'] + (best_mult * band_std_oos)
-                    lower_oos = test_df['Kalman_Price'] - (best_mult * band_std_oos)
-                    sig_oos = pd.Series(0, index=test_df.index)
-                    sig_oos[test_df['Close'] < lower_oos] = 1
-                    sig_oos[test_df['Close'] > upper_oos] = -1
-                    oos_pos = sig_oos.replace(0, np.nan).ffill().fillna(0)
-                    oos_positions.iloc[train_end:test_end] = oos_pos.values
-                bt_df['Target_Position'] = oos_positions
-            else:
-                band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
-                bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * band_std)
-                bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * band_std)
-                sig = pd.Series(0, index=bt_df.index)
-                sig[bt_df['Close'] < bt_df['Lower_Band']] = 1
-                sig[bt_df['Close'] > bt_df['Upper_Band']] = -1
-                bt_df['Target_Position'] = sig.replace(0, np.nan).ffill().fillna(0)
-
-            bt_df['Actual_Position'] = bt_df['Target_Position'].shift(1).fillna(0)
-            bt_df['Gross_Return'] = bt_df['Actual_Position'] * bt_df['Underlying_Return']
-            turnover = bt_df['Actual_Position'].diff().abs().fillna(0)
-            total_cost = (slippage_bps + commission_bps) / 10000
-            bt_df['Net_Return'] = bt_df['Gross_Return'] - (turnover * total_cost * (1 + (bt_df['Vol_Regime'] > 0.35).astype(int)))
-            
-            eval_df = bt_df.iloc[train_size:] if len(bt_df) > train_size + step_size else bt_df
-            win_rate = (eval_df['Net_Return'] > 0).mean() * 100
-            cumulative = (1 + eval_df['Net_Return']).prod() - 1
-            outperf = cumulative - ((1 + eval_df['Underlying_Return']).prod() - 1)
-            peak = (1 + eval_df['Net_Return']).cumprod().cummax()
-            max_dd = (((1 + eval_df['Net_Return']).cumprod() - peak) / peak).min() * 100
-            
-            ann_return = eval_df['Net_Return'].mean() * 252
-            sortino = ann_return / (eval_df[eval_df['Net_Return'] < 0]['Net_Return'].std() * np.sqrt(252) + 1e-9)
-            calmar = ann_return / (abs(max_dd)/100 + 1e-9)
-            
-            wins = eval_df[eval_df['Net_Return'] > 0]['Net_Return']
-            losses = eval_df[eval_df['Net_Return'] < 0]['Net_Return']
-            half_kelly = 0.0
-            if len(wins) > 0 and len(losses) > 0:
-                win_prob = len(wins) / (len(wins) + len(losses))
-                if abs(losses.mean()) > 0:
-                    kelly_fraction = win_prob - ((1 - win_prob) / (wins.mean() / abs(losses.mean())))
-                    half_kelly = max(0.0, kelly_fraction / 2.0) * 100 
-            
-            last_band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
-            bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * last_band_std)
-            bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * last_band_std)
-            return round(win_rate,1), round(cumulative*100,1), round(outperf*100,1), round(max_dd,1), round(half_kelly,1), round(sortino, 2), round(calmar, 2), bt_df
-        except:
-            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, df.copy()
-
-class QuantLogic:
-    @staticmethod
-    def calculate_vol(df): return df['Close'].pct_change().std() * np.sqrt(252) * 100
-
-    @staticmethod
-    def get_atm_iv(ticker, current_price):
-        try:
-            chain = get_option_chain(ticker)
-            if chain is None: return None
-            calls = chain.calls
-            atm_idx = (calls['strike'] - current_price).abs().idxmin()
-            bid, ask = calls.loc[atm_idx, 'bid'], calls.loc[atm_idx, 'ask']
-            if bid > 0 and ask > 0:
-                return round(calls.loc[atm_idx, 'impliedVolatility'] * 100, 2)
-            return None
-        except:
-            return None
-
-    @staticmethod
-    def calculate_vrp_edge(ticker, df, mode="scanner"):
-        if mode == "scanner":
-            hv20 = df['Close'].pct_change().tail(20).std() * np.sqrt(252) * 100
-            hv60 = df['Close'].pct_change().tail(60).std() * np.sqrt(252) * 100
-            return round(hv20 - hv60, 2)
-        else:
-            hv = QuantLogic.calculate_vol(df)
-            iv = QuantLogic.get_atm_iv(ticker, df['Close'].iloc[-1])
-            return round(iv - hv, 2) if iv else 0.0
-
-    @staticmethod
-    def detect_reversal(df):
-        try:
-            if len(df) < 201: return "Insufficient Data"
-            sma50, sma200 = df['Close'].rolling(50).mean(), df['Close'].rolling(200).mean()
-            if sma50.iloc[-2] < sma200.iloc[-2] and sma50.iloc[-1] >= sma200.iloc[-1]: return "Golden Cross (Bull)"
-            elif sma50.iloc[-2] > sma200.iloc[-2] and sma50.iloc[-1] <= sma200.iloc[-1]: return "Death Cross (Bear)"
-            delta = df['Close'].diff()
-            rs = (delta.where(delta > 0, 0)).rolling(14).mean() / ((-delta.where(delta < 0, 0)).rolling(14).mean() + 1e-9)
-            rsi = 100 - (100 / (1 + rs))
-            if rsi.iloc[-2] < 30 and rsi.iloc[-1] >= 30: return "RSI Bull Bounce"
-            elif rsi.iloc[-2] > 70 and rsi.iloc[-1] <= 70: return "RSI Bear Rejection"
-            return "No Active Reversal"
-        except:
-            return "No Active Reversal"
-
-    @staticmethod
-    def calculate_sharpe(df, risk_free_rate=0.04):
-        returns = df['Close'].pct_change().dropna()
-        vol = returns.std() * np.sqrt(252)
-        return round((returns.mean() * 252 - risk_free_rate) / vol, 2) if vol > 0 else 0
-
-    @staticmethod
-    def get_support_resistance(df):
-        return df['Low'].rolling(50).min().iloc[-1], df['High'].rolling(50).max().iloc[-1]
-        
-    @staticmethod
-    def calculate_var(df, confidence=0.95):
-        try: return round(df['Close'].iloc[-1] * (1 + np.percentile(df['Close'].pct_change().dropna(), (1 - confidence) * 100)), 2)
-        except: return df['Close'].iloc[-1] * 0.95
-
-    @staticmethod
-    def calculate_upside_var(df, confidence=0.95):
-        try: return round(df['Close'].iloc[-1] * (1 + np.percentile(df['Close'].pct_change().dropna(), confidence * 100)), 2)
-        except: return df['Close'].iloc[-1] * 1.05
-
-    @staticmethod
-    def calculate_greeks(S, K, T, r, sigma, option_type='call'):
-        d1 = (np.log(S/K) + (r + 0.5*sigma**2)*T) / (sigma*np.sqrt(T))
-        pdf = norm.pdf(d1)
-        return {'delta': round(norm.cdf(d1) if option_type == 'call' else -norm.cdf(-d1), 3), 'gamma': round(pdf / (S * sigma * np.sqrt(T)), 4), 'vega': round(S * pdf * np.sqrt(T), 2)}
-
-    @staticmethod
-    def bs_call(S, K, T, r, sigma):
-        if T <= 0 or sigma <= 0: return max(0, S - K)
-        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        return S * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d1 - sigma * np.sqrt(T))
-
-    @staticmethod
-    def bs_put(S, K, T, r, sigma):
-        if T <= 0 or sigma <= 0: return max(0, K - S)
-        d1 = (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        return K * np.exp(-r * T) * norm.cdf(-(d1 - sigma * np.sqrt(T))) - S * norm.cdf(-d1)
-
-class TradeArchitect:
-    @staticmethod
-    def prob_itm(S, K, T, r, sigma, option_type='call'):
-        if T <= 0 or sigma <= 0: return 0.0
-        d2 = (np.log(S / K) + (r - 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        return norm.cdf(d2) if option_type == 'call' else norm.cdf(-d2)
-
-    @staticmethod
-    def generate_plan(ticker, price, score, vol, sup, res, half_kelly):
-        plan = {}
-        bias = "LONG (Bullish Trend)" if score >= 60 else "SHORT (Bearish Trend)" if score <= 40 else "NEUTRAL (Mean-Reverting)"
-        vol_regime = "HIGH" if vol > 35 else "LOW"
-        sigma, r, T30 = max(0.01, vol / 100), 0.04, 30 / 365
-        res = price * 1.05 if res <= price else res
-        sup = price * 0.95 if sup >= price else sup
-        lower_wing, upper_wing = sup * 0.95, res * 1.05
-        
-        if "LONG" in bias:
-            if vol_regime == "LOW":
-                plan['name'], plan['legs'] = "Long Call Vertical", f"+C({price:.0f}) / -C({res:.0f})"
-                debit = QuantLogic.bs_call(price, price, T30, r, sigma) - QuantLogic.bs_call(price, res, T30, r, sigma)
-                plan['premium'] = f"Debit ${max(0.01, debit):.2f}"
-                plan['pop'] = int(TradeArchitect.prob_itm(price, price + debit, T30, r, sigma, 'call') * 100)
-            else:
-                plan['name'], plan['legs'] = "Short Put Vertical", f"-P({sup:.0f}) / +P({lower_wing:.0f})"
-                credit = QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)
-                plan['premium'] = f"Credit ${max(0.01, credit):.2f}"
-                plan['pop'] = int((1 - TradeArchitect.prob_itm(price, sup, T30, r, sigma, 'put')) * 100)
-        elif "SHORT" in bias:
-            if vol_regime == "LOW":
-                plan['name'], plan['legs'] = "Long Put Vertical", f"+P({price:.0f}) / -P({sup:.0f})"
-                debit = QuantLogic.bs_put(price, price, T30, r, sigma) - QuantLogic.bs_put(price, sup, T30, r, sigma)
-                plan['premium'] = f"Debit ${max(0.01, debit):.2f}"
-                plan['pop'] = int(TradeArchitect.prob_itm(price, price - debit, T30, r, sigma, 'put') * 100)
-            else:
-                plan['name'], plan['legs'] = "Short Call Vertical", f"-C({res:.0f}) / +C({upper_wing:.0f})"
-                credit = QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma)
-                plan['premium'] = f"Credit ${max(0.01, credit):.2f}"
-                plan['pop'] = int((1 - TradeArchitect.prob_itm(price, res, T30, r, sigma, 'call')) * 100)
-        else:
-            plan['name'], plan['legs'] = "Iron Condor", f"+P({lower_wing:.0f}) / -P({sup:.0f}) | -C({res:.0f}) / +C({upper_wing:.0f})"
-            credit = (QuantLogic.bs_put(price, sup, T30, r, sigma) - QuantLogic.bs_put(price, lower_wing, T30, r, sigma)) + (QuantLogic.bs_call(price, res, T30, r, sigma) - QuantLogic.bs_call(price, upper_wing, T30, r, sigma))
-            plan['premium'] = f"Credit ${max(0.01, credit):.2f}"
-            plan['pop'] = 65
-            
-        plan['greeks'] = QuantLogic.calculate_greeks(price, price, T30, r, sigma)
-        plan['kelly_size'] = f"{int(max(5, min(50, half_kelly)))}% capital"
-        plan['dte'], plan['bias'] = "30 Days", bias
-        return plan
-
-    @staticmethod
-    def generate_hybrid_plan(price, score, vrp, sup, res):
-        hybrid = {}
-        if score >= 60:
-            if vrp > 0:
-                hybrid['name'], hybrid['action'], hybrid['logic'] = "The Institutional Buy-Write (Yield Harvest)", f"Buy Shares @ Market AND Sell 1 Call @ ${res:.2f}", "Trend is strong, options expensive. Buy stock, sell overpriced calls to lower risk."
-            else:
-                hybrid['name'], hybrid['action'], hybrid['logic'] = "The Bulletproof Bull (Protected Upside)", f"Buy Shares @ Market AND Buy 1 Put @ ${sup:.2f}", "Trend is strong, options cheap. Ride stock up, buy cheap insurance at Support."
-        elif score <= 40:
-            if vrp > 0:
-                hybrid['name'], hybrid['action'], hybrid['logic'] = "The Warren Buffett Entry (Discount Acquisition)", f"Hold Cash AND Sell 1 Cash-Secured Put @ ${sup:.2f}", "Momentum weak, fear high. Sell puts to get paid while waiting to buy at floor."
-            else:
-                hybrid['name'], hybrid['action'], hybrid['logic'] = "The Smart-Money Short (Risk-Defined Bear)", f"Do NOT Buy Stock. Buy Put Spread targeting ${sup:.2f}", "Momentum broken, options cheap. Use put options to profit from drop without shorting."
-        else:
-            hybrid['name'], hybrid['action'], hybrid['logic'] = "The Floor-to-Ceiling Swing (Mean Reversion)", f"Limit Buy @ ${sup:.2f} AND Sell Target @ ${res:.2f}", "Stock trapped in channel. Refuse current prices. Trap at floor, sell at ceiling."
-        return hybrid
-
+# --- SPECIFIC UI ENGINE CLASSES RETAINED HERE ---
 class MonteCarloEngine:
     @staticmethod
     def simulate_paths(df, days=30, sims=1000):
@@ -370,16 +16,12 @@ class MonteCarloEngine:
             price = df['Close'].iloc[-1]
             returns = np.log(df['Close']/df['Close'].shift(1)).dropna()
             mu, dt = returns.mean() * 252, 1/252
-            
-            # --- V30.1 STOCHASTIC VOL (HESTON-LITE) UPGRADE ---
             kappa, theta, sigma_v, rho = 2.0, 0.04, 0.6, -0.7  
             ewma_var = np.average(returns**2, weights=np.power(0.94, np.arange(len(returns)-1,-1,-1)))
             v = np.full(sims, ewma_var * 252) 
-            
             jumps = np.random.poisson(0.8*dt,(days,sims)) * np.random.normal(-0.015, 0.08, (days,sims))
             paths = np.zeros((days+1, sims))
             paths[0] = price
-            
             for t in range(1, days+1):
                 dv = kappa*(theta - v)*dt + sigma_v*np.sqrt(v*dt)*np.random.normal(0,1,(sims,))
                 v = np.maximum(v + dv, 1e-8)
@@ -389,6 +31,33 @@ class MonteCarloEngine:
             return pd.DataFrame(paths)
         except:
             return pd.DataFrame(np.tile(df['Close'].iloc[-1], (days+1, sims)))
+
+class SectorStrengthEngine:
+    SECTOR_ETFS = {"🔥 Magnificent 7 + BTC": "MAGS", "💻 Information Technology": "XLK", "🏦 Financials": "XLF", "🏥 Healthcare": "XLV", "🛒 Consumer Discretionary": "XLY", "📡 Communication Services": "XLC", "🏭 Industrials": "XLI", "🧼 Consumer Staples": "XLP", "🛢️ Energy": "XLE", "🔌 Utilities": "XLU", "🏠 Real Estate": "XLRE", "🪙 Digital Assets & Proxies": "WGMI"}
+    @staticmethod
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def get_strongest_sector():
+        try:
+            returns = {sector: (df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1 for sector, etf in SectorStrengthEngine.SECTOR_ETFS.items() if len(df := yf.Ticker(etf).history(period="1mo")) > 15}
+            best_sector = max(returns, key=returns.get) if returns else "💻 Information Technology"
+            return best_sector, returns.get(best_sector, 0.0)
+        except: return "💻 Information Technology", 0.0 
+
+class UniverseEngine:
+    SECTOR_UNIVERSE = {
+        "🔥 Magnificent 7 + BTC": ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "BTC-USD"],
+        "💻 Information Technology": ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "ADBE", "CSCO", "INTC", "QCOM", "TXN", "IBM", "NOW", "INTU", "AMAT", "MU", "PANW", "SNOW", "CRWD"],
+        "🏦 Financials": ["JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "C", "BLK", "SPGI", "CME", "SCHW", "CB", "MMC", "PGR", "USB", "PNC", "TFC", "COF"],
+        "🏥 Healthcare": ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "MDT", "VRTX", "REGN", "GILD", "BSX", "CVS", "CI", "ZTS", "BDX", "HUM", "BIIB"],
+        "🛒 Consumer Discretionary": ["AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "CMG", "MAR", "HLT", "ORLY", "ABNB", "GM", "F", "FVRR", "CHWY", "ETSY", "EBAY"],
+        "📡 Communication Services": ["GOOGL", "META", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "CHTR", "EA", "TTWO", "LYV", "MTCH", "FOXA", "SIRI", "ROKU", "SNAP", "PINS", "ZG"],
+        "🏭 Industrials": ["GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "UPS", "MMM", "LUV", "FDX", "ETN", "EMR", "NOC", "GD", "CSX", "NSC", "PCAR"],
+        "🧼 Consumer Staples": ["WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "EL", "CL", "KMB", "MDLZ", "SYY", "HSY", "KR", "GIS", "CHD", "K", "CPB"],
+        "🛢️ Energy": ["XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "PSX", "WMB", "KMI", "HES", "BKR", "DVN", "FANG", "TRGP", "OKE", "CTRA", "MRO"],
+        "🔌 Utilities": ["NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "PEG", "XEL", "ED", "WEC", "AWK", "ES", "ETR", "FE", "CMS", "LNT", "NI"],
+        "🏠 Real Estate": ["AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "VICI", "CSG", "AVB", "DRE", "EXR", "MAA", "ESS", "INVH", "UDR", "CPT", "HST"],
+        "🪙 Digital Assets & Proxies": ["BTC-USD", "ETH-USD", "COIN", "MSTR", "MARA", "RIOT", "CLSK", "HUT", "IBIT", "FBTC", "BITB", "ARKB", "BTCO", "EZBC", "BRRR", "HODL", "BTCW", "BITO", "CORZ", "CIFR"]
+    }
 
 class PortfolioEngine:
     @staticmethod
@@ -418,91 +87,56 @@ class PortfolioEngine:
             return max(0, min((r.mean() * 252) / (r.var() * 252 + 1e-9), 2))
         except: return 0.0
 
-class RegimeEngine:
-    @staticmethod
-    @st.cache_data(ttl=900)
-    def detect_regime():
-        try:
-            spy_close = yf.Ticker("SPY").history(period="1y")['Close']
-            vix_level = yf.Ticker("^VIX").history(period="6mo")['Close'].iloc[-1]
-            vix9d_df = yf.Ticker("^VIX9D").history(period="5d")
-            vix9d_level = vix9d_df['Close'].iloc[-1] if not vix9d_df.empty else vix_level
-
-            ma50, ma200, price = spy_close.rolling(50).mean().iloc[-1], spy_close.rolling(200).mean().iloc[-1], spy_close.iloc[-1]
-            
-            if vix9d_level > vix_level + 2: return "Vol-Squeeze → Explosive Move Imminent"
-            elif price > ma50 > ma200 and vix_level < 20 and spy_close.pct_change(60).iloc[-1] > 0: return "Risk-On"
-            elif price < ma200 and vix_level > 25: return "Risk-Off"
-            else: return "Neutral"
-        except: return "Neutral"
-
 class OptionsExpectedMove:
     @staticmethod
     def calculate(ticker, current_price):
         try:
-            chain = get_option_chain(ticker)
+            chain = OptionsDataEngine.get_robust_chain(ticker)
             if chain is None: return 0, 0, 0
-            
             calls, puts = chain.calls, chain.puts
             calls['diff'] = abs(calls['strike'] - current_price)
             puts['diff'] = abs(puts['strike'] - current_price)
-            atm_call = calls.sort_values('diff').iloc[0]
-            atm_put = puts.sort_values('diff').iloc[0]
-
+            atm_call, atm_put = calls.sort_values('diff').iloc[0], puts.sort_values('diff').iloc[0]
             call_price = (atm_call['bid'] + atm_call['ask']) / 2 if (atm_call['bid'] > 0) else atm_call['lastPrice']
             put_price = (atm_put['bid'] + atm_put['ask']) / 2 if (atm_put['bid'] > 0) else atm_put['lastPrice']
-
             expected_move = call_price + put_price
             return expected_move, current_price + expected_move, current_price - expected_move
-        except:
-            return 0, 0, 0
+        except: return 0, 0, 0
 
-class SectorStrengthEngine:
-    SECTOR_ETFS = {"🔥 Magnificent 7 + BTC": "MAGS", "💻 Information Technology": "XLK", "🏦 Financials": "XLF", "🏥 Healthcare": "XLV", "🛒 Consumer Discretionary": "XLY", "📡 Communication Services": "XLC", "🏭 Industrials": "XLI", "🧼 Consumer Staples": "XLP", "🛢️ Energy": "XLE", "🔌 Utilities": "XLU", "🏠 Real Estate": "XLRE", "🪙 Digital Assets & Proxies": "WGMI"}
-    @staticmethod
-    @st.cache_data(ttl=3600, show_spinner=False)
-    def get_strongest_sector():
-        try:
-            returns = {sector: (df['Close'].iloc[-1] / df['Close'].iloc[0]) - 1 for sector, etf in SectorStrengthEngine.SECTOR_ETFS.items() if len(df := yf.Ticker(etf).history(period="1mo")) > 15}
-            best_sector = max(returns, key=returns.get) if returns else "💻 Information Technology"
-            return best_sector, returns.get(best_sector, 0.0)
-        except: return "💻 Information Technology", 0.0 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_history(ticker, period="2y"):
+    time.sleep(1.0) 
+    return yf.Ticker(ticker).history(period=period)
 
-class UniverseEngine:
-    SECTOR_UNIVERSE = {
-        "🔥 Magnificent 7 + BTC": ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "TSLA", "BTC-USD"],
-        "💻 Information Technology": ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "ADBE", "CSCO", "INTC", "QCOM", "TXN", "IBM", "NOW", "INTU", "AMAT", "MU", "PANW", "SNOW", "CRWD"],
-        "🏦 Financials": ["JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "AXP", "C", "BLK", "SPGI", "CME", "SCHW", "CB", "MMC", "PGR", "USB", "PNC", "TFC", "COF"],
-        "🏥 Healthcare": ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "AMGN", "ISRG", "SYK", "MDT", "VRTX", "REGN", "GILD", "BSX", "CVS", "CI", "ZTS", "BDX", "HUM", "BIIB"],
-        "🛒 Consumer Discretionary": ["AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW", "BKNG", "TJX", "CMG", "MAR", "HLT", "ORLY", "ABNB", "GM", "F", "FVRR", "CHWY", "ETSY", "EBAY"],
-        "📡 Communication Services": ["GOOGL", "META", "NFLX", "DIS", "VZ", "T", "CMCSA", "TMUS", "WBD", "CHTR", "EA", "TTWO", "LYV", "MTCH", "FOXA", "SIRI", "ROKU", "SNAP", "PINS", "ZG"],
-        "🏭 Industrials": ["GE", "CAT", "UBER", "BA", "RTX", "LMT", "HON", "UNP", "DE", "UPS", "MMM", "LUV", "FDX", "ETN", "EMR", "NOC", "GD", "CSX", "NSC", "PCAR"],
-        "🧼 Consumer Staples": ["WMT", "PG", "COST", "KO", "PEP", "PM", "TGT", "MO", "DG", "EL", "CL", "KMB", "MDLZ", "SYY", "HSY", "KR", "GIS", "CHD", "K", "CPB"],
-        "🛢️ Energy": ["XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "VLO", "HAL", "PSX", "WMB", "KMI", "HES", "BKR", "DVN", "FANG", "TRGP", "OKE", "CTRA", "MRO"],
-        "🔌 Utilities": ["NEE", "CEG", "SO", "DUK", "SRE", "AEP", "D", "PCG", "EXC", "PEG", "XEL", "ED", "WEC", "AWK", "ES", "ETR", "FE", "CMS", "LNT", "NI"],
-        "🏠 Real Estate": ["AMT", "PLD", "CCI", "EQIX", "O", "PSA", "SPG", "WELL", "DLR", "VICI", "CSG", "AVB", "DRE", "EXR", "MAA", "ESS", "INVH", "UDR", "CPT", "HST"],
-        "🪙 Digital Assets & Proxies": ["BTC-USD", "ETH-USD", "COIN", "MSTR", "MARA", "RIOT", "CLSK", "HUT", "IBIT", "FBTC", "BITB", "ARKB", "BTCO", "EZBC", "BRRR", "HODL", "BTCW", "BITO", "CORZ", "CIFR"]
-    }
-
-class DynamicUniverseEngine:
-    @staticmethod
-    def get_apex_100():
-        return [
-            "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "AVGO", "LLY", "JPM", "V", "MA", "UNH", "XOM", "JNJ", 
-            "HD", "PG", "COST", "MRK", "ABBV", "CRM", "AMD", "BAC", "NFLX", "KO", "PEP", "TMO", "WMT", "DIS", "ADBE", 
-            "CSCO", "INTC", "QCOM", "TXN", "IBM", "NOW", "UBER", "PLTR", "WFC", "GS", "MS", "AXP", "C", "BLK", "SPGI", 
-            "HOOD", "SOFI", "COIN", "PYPL", "SQ", "AFRM", "UPST", "CVX", "COP", "SLB", "EOG", "MPC", "GE", "CAT", "BA", 
-            "RTX", "LMT", "HON", "UNP", "DE", "VLO", "OXY", "HAL", "GD", "NOC", "WM", "MCD", "NKE", "SBUX", "LOW", 
-            "ROKU", "DKNG", "SPOT", "SNOW", "CRWD", "PANW", "MSTR", "MARA", "RIOT", "CVNA", "SMCI", "ARM", "TSM", "ASML", 
-            "BTC-USD", "ETH-USD", "IBIT", "MU", "AMAT", "LRCX", "KLAC", "SYM", "DELL", "MNDY"
-        ]
+def inject_institutional_css():
+    st.markdown("""
+    <style>
+        .stApp { background-color: #0B0F19; color: #F8FAFC; }
+        [data-testid="stSidebar"] { background-color: #0F172A; border-right: 1px solid #1E293B; }
+        div[data-testid="metric-container"] {
+            background-color: #1E293B; border: 1px solid #334155;
+            padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        div[data-testid="metric-container"] label { color: #94A3B8 !important; font-weight: 600 !important; letter-spacing: 0.5px; }
+        div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 1.8rem !important; font-weight: 700 !important; }
+        .apex-box {
+            background-color: #082F49; border-left: 5px solid #38BDF8;
+            border-radius: 5px; padding: 20px; margin-top: 15px; margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .apex-title { color: #BAE6FD; font-size: 1.4em; font-weight: 800; margin-bottom: 10px; }
+        .apex-action { color: #38BDF8; font-size: 1.2em; font-weight: 700; margin-bottom: 10px; }
+        .apex-logic { color: #94A3B8; font-size: 1em; font-style: italic; }
+        h1, h2, h3 { color: #F1F5F9 !important; font-weight: 700 !important; }
+        hr { border-color: #334155 !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 class MarketScanner:
     @staticmethod
     @st.cache_data(ttl=900, show_spinner=False)
     def run_scan(tickers):
         regime, results, price_dict = RegimeEngine.detect_regime(), [], {}
-
         for t in tickers:
             try:
                 df = fetch_history(t, period="2y")
@@ -522,6 +156,8 @@ class MarketScanner:
                 sup, res = QuantLogic.get_support_resistance(df)
                 win_rate, strat_ret, outperf, max_dd, kelly, sortino, calmar, _ = BacktestEngine.run_wfo_backtest(df)
                 plan = TradeArchitect.generate_plan(t, price, score, vol, sup, res, kelly)
+                
+                # --- V30.2.1 UNIFIED HYBRID CALL ---
                 hybrid = TradeArchitect.generate_hybrid_plan(price, score, vrp, sup, res)
                 move, exp_upper, exp_lower = OptionsExpectedMove.calculate(t, price)
 
@@ -546,7 +182,7 @@ class MarketScanner:
 # ==========================================
 # --- STREAMLIT APP UI ---
 # ==========================================
-st.set_page_config(page_title="VRP Quant | V30 Institutional", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="VRP Quant | V30.2.1 Institutional", layout="wide", page_icon="🏦")
 inject_institutional_css() 
 
 try: USERS = st.secrets["credentials"]
@@ -574,7 +210,7 @@ def check_login():
                     st.rerun()
                 else: st.error("Invalid Credentials")
         st.markdown("---")
-        st.markdown("### 👑 Founding Member Cohort (V30.1)")
+        st.markdown("### 👑 Founding Member Cohort (V30.2.1)")
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
@@ -588,7 +224,7 @@ def check_login():
 if check_login():
     tier = st.session_state.tier
     with st.sidebar:
-        st.markdown("# 🏦 VRP Quant V30.1")
+        st.markdown("# 🏦 VRP Quant V30.2.1")
         if tier == "GOD_MODE": st.success("🔓 GOD MODE ACTIVE")
         else: st.warning("🔒 ANALYST TIER")
         st.markdown("---")
@@ -618,7 +254,6 @@ if check_login():
                 with col2:
                     if custom_input := st.text_area("Enter Tickers:", "PLTR, SOFI"): selected_tickers = [t.strip().upper() for t in custom_input.split(',')]
             elif sector_choice == "🌌 Dynamic Apex 100 (Max Liquidity)":
-                # GOD-MODE SAFETY: Cap at 60 to prevent Streamlit server timeouts
                 selected_tickers = DynamicUniverseEngine.get_apex_100()[:60]
             else: 
                 selected_tickers = UniverseEngine.SECTOR_UNIVERSE[sector_choice]
@@ -694,12 +329,25 @@ if check_login():
                     curr_price = df['Close'].iloc[-1]
                     score, vol = AlphaEngine.calculate_score(df), QuantLogic.calculate_vol(df)
                     vrp_edge_val = QuantLogic.calculate_vrp_edge(ticker, df, mode="deep_dive")
+                    
+                    # --- V30.2 DATA INTEGRITY KILL-SWITCH ---
+                    if pd.isna(vrp_edge_val):
+                        st.error(f"⚠️ DATA INTEGRITY LOCK: Options pricing API is throttled or illiquid for {ticker}. VRP Edge cannot be mathematically verified. Deep Dive halted to prevent invalid projections.")
+                        st.stop()
+                    
                     reversal_signal, sharpe = QuantLogic.detect_reversal(df), QuantLogic.calculate_sharpe(df)
                     sup, res = QuantLogic.get_support_resistance(df)
-                    var_95 = QuantLogic.calculate_var(df)
+                    
+                    try:
+                        var_95 = round(curr_price * (1 + np.percentile(df['Close'].pct_change().dropna(), 5)), 2)
+                    except:
+                        var_95 = curr_price * 0.95
+                        
                     win_rate, strat_ret, outperf, max_dd, half_kelly, sortino, calmar, bt_df = BacktestEngine.run_wfo_backtest(df)
                     
                     plan = TradeArchitect.generate_plan(ticker, curr_price, score, vol, sup, res, half_kelly)
+                    
+                    # --- V30.2.1 UNIFIED HYBRID CALL ---
                     hybrid = TradeArchitect.generate_hybrid_plan(curr_price, score, vrp_edge_val, sup, res)
                     
                     mc_sims = 5000 if tier == "GOD_MODE" else 1000
@@ -742,7 +390,11 @@ if check_login():
                     r2.metric("WFO Status", "Active (OOS)" if len(df) > 315 else "In-Sample")
                     r3.metric("Sortino Ratio", f"{sortino:.2f}")
                     r4.metric("Calmar Ratio", f"{calmar:.2f}")
-                    r5.metric("Upside VaR (Shorts)", f"${QuantLogic.calculate_upside_var(df):.2f}")
+                    try:
+                        upside_var = round(curr_price * (1 + np.percentile(df['Close'].pct_change().dropna(), 95)), 2)
+                    except:
+                        upside_var = curr_price * 1.05
+                    r5.metric("Upside VaR (Shorts)", f"${upside_var:.2f}")
 
                     allocation_action = "DEPLOY CAPITAL" if half_kelly > 0 else "FLATTEN POSITION / NO EDGE"
                     box_color, border_color = ("#082F49", "#38BDF8") if half_kelly > 0 else ("#450a0a", "#f87171")
@@ -805,3 +457,4 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
