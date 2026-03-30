@@ -1,9 +1,6 @@
 streamlit
-yfinance
 pandas
 numpy
+yfinance
 plotly
-scipy
-pytz
-arch
-
+arch   # optional – GARCH(1,1); falls back to EWMA if missing
