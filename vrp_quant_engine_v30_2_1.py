@@ -90,24 +90,40 @@ def fetch_history(ticker: str, period: str = "2y") -> pd.DataFrame:
 # SPARKLINE HELPERS
 # ---------------------------------------------------------------------------
 
-def get_sparkline(data: pd.Series | list) -> str:
+def get_sparkline(df_subset):
     """
-    Render a Unicode block-character sparkline from a 1-D price series.
-
-    Args:
-        data: Sequence of numeric values (e.g. closing prices).
-
-    Returns:
-        str: Unicode bar string, length == len(data).
+    True OHLC Candle Sparkline.
+    Height maps to absolute price level. Color maps to intraday action.
     """
-    bars = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
-    s_min, s_max = min(data), max(data)
-    if s_max == s_min:
-        return bars[0] * len(data)
-    scaled = np.clip(np.int_((np.array(data) - s_min) / (s_max - s_min) * 7), 0, 7)
-    return "".join(bars[i] for i in scaled)
+    # Fallback if an array is passed instead of a DataFrame
+    if not isinstance(df_subset, pd.DataFrame):
+        bars = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+        s_min, s_max = min(df_subset), max(df_subset)
+        if s_max == s_min: return bars[0] * len(df_subset)
+        scaled = np.clip(np.int_((df_subset - s_min) / (s_max - s_min) * 7), 0, 7)
+        return "".join([bars[i] for i in scaled])
 
-
+    if len(df_subset) < 2:
+        return "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
+        
+    bars = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+    s_min, s_max = df_subset['Low'].min(), df_subset['High'].max()
+    
+    spark = []
+    for _, row in df_subset.iterrows():
+        # Height logic
+        if s_max == s_min:
+            idx = 0
+        else:
+            idx = np.clip(np.int_((row['Close'] - s_min) / (s_max - s_min) * 7), 0, 7)
+            
+        char = bars[idx]
+        
+        # Color logic: Green if Close >= Open, Red if Close < Open
+        color = "#4ADE80" if row['Close'] >= row['Open'] else "#F87171"
+        spark.append(f"<span style='color:{color};'>{char}</span>")
+        
+    return "".join(spark)
 # [PKG-02] Migrated from Script 2 into the shared package
 def get_candle_sparkline(df_subset: pd.DataFrame) -> str:
     """
@@ -1043,4 +1059,5 @@ class DynamicUniverseEngine:
             "MARA", "RIOT", "CVNA", "SMCI", "ARM", "TSM", "ASML", "BTC-USD",
             "ETH-USD", "IBIT", "MU", "AMAT", "LRCX", "KLAC", "SYM", "DELL", "MNDY",
         ]
+
 
