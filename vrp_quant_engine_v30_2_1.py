@@ -365,153 +365,86 @@ class AlphaEngine:
 # ---------------------------------------------------------------------------
 
 class BacktestEngine:
-    """
-    Walk-Forward Optimisation (WFO) backtester with transaction cost modelling
-    and a half-Kelly position-sizing recommendation.
-    """
-
     @staticmethod
-    def run_wfo_backtest(
-        df: pd.DataFrame,
-        slippage_bps: int = 5,
-        commission_bps: int = 2,
-    ) -> tuple[float, float, float, float, float, float, float, pd.DataFrame]:
-        """
-        Run an anchored Walk-Forward Optimisation backtest.
-
-        Training window : 252 bars
-        Step size       : 63 bars (quarterly re-optimisation)
-        Optimised param : Bollinger Band multiplier ∈ {1.5, 2.0, 2.5}
-        Cost model      : (slippage_bps + commission_bps) × turnover;
-                          doubled during high-vol regimes (GARCH > 35%)
-
-        Args:
-            df:             OHLCV DataFrame with a ``Close`` column.
-            slippage_bps:   One-way slippage assumption in basis points.
-            commission_bps: One-way commission assumption in basis points.
-
-        Returns:
-            Tuple of:
-                win_rate    (float): % of profitable trading days (OOS).
-                cumulative  (float): Net cumulative return % (OOS).
-                outperf     (float): Alpha vs buy-and-hold % (OOS).
-                max_dd      (float): Maximum drawdown % (OOS, negative convention).
-                half_kelly  (float): Half-Kelly fraction % for position sizing.
-                sortino     (float): Annualised Sortino ratio (OOS).
-                calmar      (float): Calmar ratio (OOS).
-                bt_df       (pd.DataFrame): Full backtest DataFrame with band columns.
-        """
-        _null = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, df.copy())
+    def run_wfo_backtest(df, slippage_bps=5, commission_bps=2):
         try:
             bt_df = df.copy().dropna()
-            if len(bt_df) < 50:
-                return _null
-
-            bt_df["Kalman_Price"] = AlphaEngine.apply_kalman_filter(bt_df["Close"])
-            returns = bt_df["Close"].pct_change().fillna(0)
-            bt_df["Vol_Regime"] = AlphaEngine.apply_garch(returns)
-            bt_df["Underlying_Return"] = returns
-
-            train_size, step_size = 252, 63
-            multipliers = [1.5, 2.0, 2.5]
+            if len(bt_df) < 50: return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, bt_df
+            bt_df['Kalman_Price'] = AlphaEngine.apply_kalman_filter(bt_df['Close'])
+            returns = bt_df['Close'].pct_change().fillna(0)
+            bt_df['Vol_Regime'] = AlphaEngine.apply_garch(returns)
+            bt_df['Underlying_Return'] = returns
+            
+            train_size, step_size = 252, 63   
+            multipliers = [1.5, 2.0, 2.5] 
             oos_positions = pd.Series(0.0, index=bt_df.index, dtype=float)
-
+            
             if len(bt_df) > train_size + step_size:
                 for start_idx in range(0, len(bt_df) - train_size, step_size):
-                    train_end = start_idx + train_size
-                    test_end = min(start_idx + train_size + step_size, len(bt_df))
+                    train_end, test_end = start_idx + train_size, min(start_idx + train_size + step_size, len(bt_df))
                     train_df = bt_df.iloc[start_idx:train_end]
-
-                    best_sharpe, best_mult = -999.0, 2.0
+                    best_sharpe, best_mult = -999, 2.0
+                    
                     for m in multipliers:
-                        band_std = (
-                            train_df["Vol_Regime"] * train_df["Kalman_Price"] / np.sqrt(252)
-                        )
-                        upper = train_df["Kalman_Price"] + m * band_std
-                        lower = train_df["Kalman_Price"] - m * band_std
+                        band_std = train_df['Vol_Regime'] * train_df['Kalman_Price'] / np.sqrt(252)
+                        upper, lower = train_df['Kalman_Price'] + (m * band_std), train_df['Kalman_Price'] - (m * band_std)
                         sig = pd.Series(0, index=train_df.index)
-                        sig[train_df["Close"] < lower] = 1
-                        sig[train_df["Close"] > upper] = -1
+                        sig[train_df['Close'] < lower] = 1
+                        sig[train_df['Close'] > upper] = -1
                         pos = sig.replace(0, np.nan).ffill().fillna(0).shift(1).fillna(0)
-                        strat_rets = pos * train_df["Underlying_Return"]
+                        strat_rets = pos * train_df['Underlying_Return']
                         sharpe = np.sqrt(252) * strat_rets.mean() / (strat_rets.std() + 1e-9)
-                        if sharpe > best_sharpe:
-                            best_sharpe, best_mult = sharpe, m
-
+                        if sharpe > best_sharpe: best_sharpe, best_mult = sharpe, m
+                            
                     test_df = bt_df.iloc[train_end:test_end]
-                    band_std_oos = (
-                        test_df["Vol_Regime"] * test_df["Kalman_Price"] / np.sqrt(252)
-                    )
-                    upper_oos = test_df["Kalman_Price"] + best_mult * band_std_oos
-                    lower_oos = test_df["Kalman_Price"] - best_mult * band_std_oos
+                    band_std_oos = test_df['Vol_Regime'] * test_df['Kalman_Price'] / np.sqrt(252)
+                    upper_oos, lower_oos = test_df['Kalman_Price'] + (best_mult * band_std_oos), test_df['Kalman_Price'] - (best_mult * band_std_oos)
                     sig_oos = pd.Series(0, index=test_df.index)
-                    sig_oos[test_df["Close"] < lower_oos] = 1
-                    sig_oos[test_df["Close"] > upper_oos] = -1
+                    sig_oos[test_df['Close'] < lower_oos] = 1
+                    sig_oos[test_df['Close'] > upper_oos] = -1
                     oos_pos = sig_oos.replace(0, np.nan).ffill().fillna(0)
                     oos_positions.iloc[train_end:test_end] = oos_pos.values
-
-                bt_df["Target_Position"] = oos_positions
+                bt_df['Target_Position'] = oos_positions
             else:
-                # Short series fallback: single in-sample pass
-                band_std = bt_df["Vol_Regime"] * bt_df["Kalman_Price"] / np.sqrt(252)
-                upper = bt_df["Kalman_Price"] + 2 * band_std
-                lower = bt_df["Kalman_Price"] - 2 * band_std
+                band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
+                upper, lower = bt_df['Kalman_Price'] + (2 * band_std), bt_df['Kalman_Price'] - (2 * band_std)
                 sig = pd.Series(0, index=bt_df.index)
-                sig[bt_df["Close"] < lower] = 1
-                sig[bt_df["Close"] > upper] = -1
-                bt_df["Target_Position"] = sig.replace(0, np.nan).ffill().fillna(0)
+                sig[bt_df['Close'] < lower] = 1
+                sig[bt_df['Close'] > upper] = -1
+                bt_df['Target_Position'] = sig.replace(0, np.nan).ffill().fillna(0)
 
-            bt_df["Actual_Position"] = bt_df["Target_Position"].shift(1).fillna(0)
-            bt_df["Gross_Return"] = bt_df["Actual_Position"] * bt_df["Underlying_Return"]
-            turnover = bt_df["Actual_Position"].diff().abs().fillna(0)
-            total_cost = (slippage_bps + commission_bps) / 10_000
-            bt_df["Net_Return"] = bt_df["Gross_Return"] - (
-                turnover
-                * total_cost
-                * (1 + (bt_df["Vol_Regime"] > 0.35).astype(int))
-            )
-
-            eval_df = (
-                bt_df.iloc[train_size:]
-                if len(bt_df) > train_size + step_size
-                else bt_df
-            )
-
-            win_rate = (eval_df["Net_Return"] > 0).mean() * 100
-            cumulative = (1 + eval_df["Net_Return"]).prod() - 1
-            outperf = cumulative - ((1 + eval_df["Underlying_Return"]).prod() - 1)
-            peak = (1 + eval_df["Net_Return"]).cumprod().cummax()
-            max_dd = (
-                ((1 + eval_df["Net_Return"]).cumprod() - peak) / peak
-            ).min() * 100
-
-            ann_return = eval_df["Net_Return"].mean() * 252
-            downside = eval_df[eval_df["Net_Return"] < 0]["Net_Return"]
-            sortino = ann_return / (downside.std() * np.sqrt(252) + 1e-9)
-            calmar = ann_return / (abs(max_dd) / 100 + 1e-9)
-
-            wins = eval_df[eval_df["Net_Return"] > 0]["Net_Return"]
-            losses = eval_df[eval_df["Net_Return"] < 0]["Net_Return"]
+            bt_df['Actual_Position'] = bt_df['Target_Position'].shift(1).fillna(0)
+            bt_df['Gross_Return'] = bt_df['Actual_Position'] * bt_df['Underlying_Return']
+            turnover = bt_df['Actual_Position'].diff().abs().fillna(0)
+            total_cost = (slippage_bps + commission_bps) / 10000
+            bt_df['Net_Return'] = bt_df['Gross_Return'] - (turnover * total_cost * (1 + (bt_df['Vol_Regime'] > 0.35).astype(int)))
+            
+            eval_df = bt_df.iloc[train_size:] if len(bt_df) > train_size + step_size else bt_df
+            win_rate = (eval_df['Net_Return'] > 0).mean() * 100
+            cumulative = (1 + eval_df['Net_Return']).prod() - 1
+            outperf = cumulative - ((1 + eval_df['Underlying_Return']).prod() - 1)
+            peak = (1 + eval_df['Net_Return']).cumprod().cummax()
+            max_dd = (((1 + eval_df['Net_Return']).cumprod() - peak) / peak).min() * 100
+            
+            ann_return = eval_df['Net_Return'].mean() * 252
+            sortino = ann_return / (eval_df[eval_df['Net_Return'] < 0]['Net_Return'].std() * np.sqrt(252) + 1e-9)
+            calmar = ann_return / (abs(max_dd)/100 + 1e-9)
+            
+            wins, losses = eval_df[eval_df['Net_Return'] > 0]['Net_Return'], eval_df[eval_df['Net_Return'] < 0]['Net_Return']
             half_kelly = 0.0
             if len(wins) > 0 and len(losses) > 0 and abs(losses.mean()) > 0:
                 win_prob = len(wins) / (len(wins) + len(losses))
-                kelly_fraction = win_prob - (
-                    (1 - win_prob) / (wins.mean() / abs(losses.mean()))
-                )
-                half_kelly = max(0.0, kelly_fraction / 2.0) * 100
+                kelly_fraction = win_prob - ((1 - win_prob) / (wins.mean() / abs(losses.mean())))
+                half_kelly = max(0.0, kelly_fraction / 2.0) * 100 
+            
+            # ---> THE CRITICAL FIX FOR STREAMLIT PLOTLY CHART <---
+            last_band_std = bt_df['Vol_Regime'] * bt_df['Kalman_Price'] / np.sqrt(252)
+            bt_df['Upper_Band'] = bt_df['Kalman_Price'] + (2 * last_band_std)
+            bt_df['Lower_Band'] = bt_df['Kalman_Price'] - (2 * last_band_std)
+            # -----------------------------------------------------
 
-            return (
-                round(win_rate, 1),
-                round(cumulative * 100, 1),
-                round(outperf * 100, 1),
-                round(max_dd, 1),
-                round(half_kelly, 1),
-                round(sortino, 2),
-                round(calmar, 2),
-                bt_df,
-            )
-        except Exception:
-            return _null
+            return round(win_rate,1), round(cumulative*100,1), round(outperf*100,1), round(max_dd,1), round(half_kelly,1), round(sortino, 2), round(calmar, 2), bt_df
+        except: return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, df.copy()
 
 
 # ---------------------------------------------------------------------------
