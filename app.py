@@ -1,3 +1,4 @@
+from __future__ import annotations
 import streamlit as st
 from supabase import create_client, Client
 
@@ -72,8 +73,6 @@ st.sidebar.success(f"Logged in as: {st.session_state.get('user_tier')}")
 #   [UX-03]   Strict mode now shows the count of filtered setups.
 #   [UX-04]   Scanner table column order updated to surface the new sizing column.
 # =============================================================================
-
-from __future__ import annotations
 
 import concurrent.futures
 import streamlit as st
