@@ -1,3 +1,59 @@
+import streamlit as st
+from supabase import create_client, Client
+
+# ==========================================
+# 1. THE DATABASE SETUP
+# ==========================================
+@st.cache_resource
+def init_connection() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_connection()
+
+def verify_login(email: str, password: str) -> bool:
+    try:
+        response = supabase.table("subscribers").select("*").eq("email", email.lower()).execute()
+        if len(response.data) > 0:
+            user = response.data[0]
+            if user["app_password"] == password and user["status"] == "ACTIVE":
+                st.session_state["authenticated"] = True
+                st.session_state["user_tier"] = user["tier"] 
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        return False
+
+# ==========================================
+# 2. THE BOUNCER (LOGIN SCREEN)
+# ==========================================
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+if not st.session_state["authenticated"]:
+    st.title("🔒 VRP Quant Terminal")
+    email_input = st.text_input("Email")
+    password_input = st.text_input("Password", type="password")
+    
+    if st.button("Login"):
+        if verify_login(email_input, password_input):
+            st.success("Access Granted.")
+            st.rerun()
+        else:
+            st.error("Invalid email, password, or inactive subscription.")
+    
+    # THIS IS THE MAGIC LOCK. 
+    # If they are not logged in, st.stop() kills the script right here.
+    # They will never see the code below this line!
+    st.stop()
+
+# ==========================================
+# 3. YOUR ACTUAL APP 
+# ==========================================
+st.sidebar.success(f"Logged in as: {st.session_state.get('user_tier')}")
+
 # =============================================================================
 # VRP QUANT SAAS — STREAMLIT APP — v6.5
 # Task 3 Complete: Performance & UX Scaling
