@@ -493,32 +493,31 @@ def check_login() -> bool:
         st.session_state.authenticated = False
         st.session_state.tier = None
 
-    if not st.session_state.authenticated:
+    if not st.session_state.get("authenticated", False):
         st.markdown("## 🔒 VRP Quant Terminal Login")
+        
+        # ==========================================
+        # 1. THE LOGIN BOX (Confined to the left column)
+        # ==========================================
         c1, _ = st.columns([1, 2])
         with c1:
-            user = st.text_input("Username", key="login_u")
+            user = st.text_input("Email / Username", key="login_u")
             pwd  = st.text_input("Password", type="password", key="login_p")
             
             if st.button("Login"):
                 try:
-                    # --- NEW SUPABASE BOUNCER LOGIC ---
-                    # Search the database for the email the user typed in
+                    # Bouncer checks the database
                     response = supabase.table("subscribers").select("*").eq("email", user.lower()).execute()
                     
                     if len(response.data) > 0:
                         db_user = response.data[0]
-                        # Check if the password matches AND they are an active paying member
                         if db_user["app_password"] == pwd and db_user["status"] == "ACTIVE":
-                            
-                            # 1. Make the Bouncer happy
+                            # Hand over the VIP keys
                             st.session_state["authenticated"] = True
                             st.session_state["user_tier"] = db_user["tier"]
-                            
-                            # 2. Make the VRP Quant Engine happy
                             st.session_state.tier = db_user["tier"]
                             st.session_state.username = db_user["email"] 
-                            st.session_state.paypal_active = True  # Flips the magic VIP switch
+                            st.session_state.paypal_active = True
                             
                             st.success("Access Granted. Initializing VRP Quant Engine...")
                             st.rerun()
@@ -528,22 +527,25 @@ def check_login() -> bool:
                         st.error("Invalid email, password, or inactive subscription.")
                         
                 except Exception as e:
-                    st.error(f"⚠️ DATABASE ERROR: Could not connect to Supabase. {e}")
+                    st.error(f"⚠️ DATABASE ERROR: {e}")
 
         # ==========================================
-        # THE STOREFRONT (Your original custom layout!)
+        # 2. THE STOREFRONT (Full width, visible to everyone!)
         # ==========================================
         st.markdown("---")
         st.markdown("### 👑 Founding Member Cohort (V30.2.1)")
+        
         b1, b2 = st.columns(2)
         with b1:
             st.info("**ANALYST TIER**\n* Retail Price: ~~$299/mo~~\n* Founding Member: **$149/mo**")
             st.link_button("Subscribe securely via PayPal", PAYPAL_ANALYST_LINK, use_container_width=True)
+            
         with b2:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
             st.link_button("Subscribe securely via PayPal", PAYPAL_GOD_MODE_LINK, use_container_width=True)
             
-        return False
+        # Stop the rest of the app from loading until they log in
+        st.stop()
 
 
 # ---------------------------------------------------------------------------
