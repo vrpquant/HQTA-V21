@@ -21,6 +21,7 @@ def verify_login(email: str, password: str) -> bool:
             if user["app_password"] == password and user["status"] == "ACTIVE":
                 st.session_state["authenticated"] = True
                 st.session_state["user_tier"] = user["tier"] 
+                st.session_state.tier = user["tier"]
                 return True
         return False
     except Exception as e:
