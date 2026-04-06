@@ -19,9 +19,15 @@ def verify_login(email: str, password: str) -> bool:
         if len(response.data) > 0:
             user = response.data[0]
             if user["app_password"] == password and user["status"] == "ACTIVE":
+                # 1. Make the Bouncer happy
                 st.session_state["authenticated"] = True
                 st.session_state["user_tier"] = user["tier"] 
+                
+                # 2. Make the VRP Quant Engine happy (HAND OVER ALL THE KEYS)
                 st.session_state.tier = user["tier"]
+                st.session_state.status = user["status"]
+                st.session_state.subscription_status = "ACTIVE" # Added just in case it uses this name!
+                
                 return True
         return False
     except Exception as e:
