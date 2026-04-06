@@ -869,10 +869,18 @@ if check_login():
                             increasing_line_color="#38BDF8", decreasing_line_color="#334155",
                         )
                     )
+                    
                     if "Kalman_Price" in bt_df.columns:
+                        # --- THE 3 NEW LINES ---
+                        band_std = bt_df["Vol_Regime"] * bt_df["Kalman_Price"] / np.sqrt(252)
+                        bt_df["Upper_Band"] = bt_df["Kalman_Price"] + 2 * band_std
+                        bt_df["Lower_Band"] = bt_df["Kalman_Price"] - 2 * band_std
+                        # -----------------------
+                        
                         fig_price.add_trace(go.Scatter(x=bt_df.index, y=bt_df["Kalman_Price"], mode="lines", name="Kalman Filter", line=dict(color="#F8FAFC", width=1.5)))
                         fig_price.add_trace(go.Scatter(x=bt_df.index, y=bt_df["Upper_Band"],   mode="lines", name="Upper Vol Band", line=dict(color="#94A3B8", width=1, dash="dot")))
                         fig_price.add_trace(go.Scatter(x=bt_df.index, y=bt_df["Lower_Band"],   mode="lines", name="Lower Vol Band", line=dict(color="#94A3B8", width=1, dash="dot"), fill="tonexty", fillcolor="rgba(148,163,184,0.1)"))
+                    
                     fig_price.update_layout(template="plotly_dark", paper_bgcolor="#0B0F19", plot_bgcolor="#0B0F19", margin=dict(l=0, r=0, t=30, b=0), xaxis_rangeslider_visible=False, height=500, font_family="Inter")
                     st.plotly_chart(fig_price, use_container_width=True)
 
