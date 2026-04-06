@@ -505,6 +505,12 @@ def check_login() -> bool:
                     # Search the database for the email the user typed in
                     response = supabase.table("subscribers").select("*").eq("email", user.lower()).execute()
             
+            if st.button("Login"):
+        try:
+            # --- NEW SUPABASE BOUNCER LOGIC ---
+            # Search the database for the email the user typed in
+            response = supabase.table("subscribers").select("*").eq("email", user.lower()).execute()
+            
             if len(response.data) > 0:
                 db_user = response.data[0]
                 # Check if the password matches AND they are an active paying member
@@ -542,7 +548,7 @@ def check_login() -> bool:
         st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
         st.link_button("Subscribe securely via PayPal", PAYPAL_GOD_MODE_LINK, use_container_width=True)
         
-    return False  # This keeps the app locked if they haven't successfully logged in
+    return False
 
 
 # ---------------------------------------------------------------------------
