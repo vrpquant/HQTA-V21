@@ -521,9 +521,34 @@ def check_login() -> bool:
             st.success("**GOD MODE TIER**\n* Retail Price: ~~$999/mo~~\n* Founding Member: **$499/mo**")
             st.link_button("Subscribe securely via PayPal", PAYPAL_GOD_MODE_LINK, use_container_width=True)
             
+        # ==========================================
+        # PUBLIC COMPLIANCE FOOTER
+        # ==========================================
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="font-size:0.85em; color:#94A3B8; line-height:1.6; text-align:justify;
+                        padding:15px; border-left:4px solid #F59E0B; background-color:#1E293B;
+                        border-radius:4px; margin-top:30px; margin-bottom:20px;">
+                <b style="color:#F8FAFC;">SEC RULE 206(4)-1 COMPLIANCE NOTICE:</b>
+                VRP Quant and its associated Terminal operate strictly as a financial data and analytics
+                publisher. We are not a registered investment advisor, broker-dealer, or financial planner.
+                All quantitative metrics, Alpha Scores, Volatility Risk Premium (VRP) edges,
+                N(d2) Probabilities of Profit (POP), and mathematically derived Support/Resistance
+                levels are for informational and educational purposes only. Past performance does not
+                guarantee future results.<br><br>
+                <div style="text-align:center; font-size:0.9em; color:#64748B;">
+                    &copy; 2026 vrpquant.com. All Rights Reserved.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         # Stop the rest of the app from loading until they log in
         st.stop()
-        return True
+        
+    return True
 
 
 # ---------------------------------------------------------------------------
