@@ -25,8 +25,7 @@ def verify_login(email: str, password: str) -> bool:
                 
                 # 2. Make the VRP Quant Engine happy (HAND OVER ALL THE KEYS)
                 st.session_state.tier = user["tier"]
-                st.session_state.status = user["status"]
-                st.session_state.subscription_status = "ACTIVE" # Added just in case it uses this name!
+                st.session_state.paypal_active = True
                 
                 return True
         return False
