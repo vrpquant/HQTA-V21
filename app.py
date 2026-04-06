@@ -523,6 +523,7 @@ def check_login() -> bool:
             
         # Stop the rest of the app from loading until they log in
         st.stop()
+        return True
 
 
 # ---------------------------------------------------------------------------
