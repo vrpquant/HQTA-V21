@@ -500,10 +500,10 @@ def check_login() -> bool:
             user = st.text_input("Username", key="login_u")
             pwd  = st.text_input("Password", type="password", key="login_p")
             if st.button("Login"):
-        try:
-            # --- NEW SUPABASE BOUNCER LOGIC ---
-            # Search the database for the email the user typed in
-            response = supabase.table("subscribers").select("*").eq("email", user.lower()).execute()
+                try:
+                    # --- NEW SUPABASE BOUNCER LOGIC ---
+                    # Search the database for the email the user typed in
+                    response = supabase.table("subscribers").select("*").eq("email", user.lower()).execute()
             
             if len(response.data) > 0:
                 db_user = response.data[0]
