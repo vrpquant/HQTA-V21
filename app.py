@@ -768,11 +768,12 @@ if check_login():
                     vrp_edge_val = QuantLogic.calculate_vrp_edge(ticker, df, mode="deep_dive")
 
                     if pd.isna(vrp_edge_val):
-                        st.error(
-                            f"⚠️ DATA INTEGRITY LOCK: Options pricing API is throttled or "
-                            f"illiquid for {ticker}. VRP Edge cannot be verified."
+                        st.warning(
+                            f"⚠️ OPTIONS API BLOCKED: Live Implied Volatility unavailable for {ticker}. "
+                            f"Falling back to historical VRP proxy."
                         )
-                        st.stop()
+                        # Graceful Fallback: Use scanner math instead of crashing
+                        vrp_edge_val = QuantLogic.calculate_vrp_edge(ticker, df, mode="scanner")
 
                     reversal_signal = QuantLogic.detect_reversal(df)
                     sharpe          = QuantLogic.calculate_sharpe(df)
