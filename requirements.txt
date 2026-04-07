@@ -5,3 +5,4 @@ yfinance
 plotly
 arch   # optional – GARCH(1,1); falls back to EWMA if missing
 supabase
+polygon-api-client
