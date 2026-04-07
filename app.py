@@ -756,7 +756,8 @@ if check_login():
                 "Executing GARCH Modeling & Out-of-Sample Walk-Forward Backtesting..."
             ):
                 try:
-                    df = fetch_history(ticker, period="2y")
+                    # Tell the engine to use our high-fidelity Polygon data for the Deep Dive
+                    df = fetch_history(ticker, period="2y", use_polygon=True)
                     if df.empty:
                         st.error(f"⚠️ No historical bars found for {ticker}.")
                         st.stop()
