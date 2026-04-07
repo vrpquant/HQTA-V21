@@ -148,7 +148,7 @@ def fetch_history(ticker: str, period: str = "2y", use_polygon: bool = False) ->
     if df.empty:
         time.sleep(0.5)  # Gentle rate limit for yf
         try:
-            df = yf.Ticker(ticker, session=safe_session).history(period=period)
+            df = yf.Ticker(ticker).history(period=period)
             logger.info(f"[{ticker}] Data fetched via yfinance.")
         except Exception as e:
             logger.warning(f"[{ticker}] yfinance fetch failed: {e}")
