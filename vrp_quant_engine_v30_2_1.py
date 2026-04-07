@@ -18,12 +18,24 @@ from __future__ import annotations
 import logging
 import time
 from typing import Optional
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from scipy.stats import norm
+import streamlit as st
 
+# --- Rate Limiting & API Imports ---
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+try:
+    from polygon import RESTClient
+except ImportError:
+    RESTClient = None
+
+# --- Optional GARCH ---
 try:
     from arch import arch_model
     ARCH_AVAILABLE: bool = True
@@ -37,7 +49,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("V30_Options_Engine")
 
-# [PKG-07] Explicit public API — controls `from vrp_quant_engine_v30_2_1 import *`
 __all__ = [
     "ARCH_AVAILABLE",
     "fetch_history",
@@ -53,27 +64,102 @@ __all__ = [
     "StochasticPricingEngine",
 ]
 
+# =============================================================================
+# INSTITUTIONAL RATE-LIMITING SESSION (yfinance)
+# Prevents IP bans by spoofing a browser and auto-pausing on 429 errors
+# =============================================================================
+safe_session = requests.Session()
+safe_session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+})
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=1.5, 
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+safe_session.mount("https://", adapter)
+safe_session.mount("http://", adapter)
+
+
+# =============================================================================
+# POLYGON API SETUP
+# =============================================================================
+try:
+    polygon_client = RESTClient(st.secrets["POLYGON_API_KEY"])
+except Exception:
+    polygon_client = None
+    logger.warning("Polygon API Key not found. Defaulting strictly to yfinance.")
+
 
 # ---------------------------------------------------------------------------
-# [PKG-01] SHARED DATA FETCHER — single source of truth for both scripts
+# SHARED DATA FETCHER (Hybrid: Polygon + yfinance)
 # ---------------------------------------------------------------------------
 
 LOCAL_CACHE: dict[str, pd.DataFrame] = {}
 
+def fetch_history(ticker: str, period: str = "2y", use_polygon: bool = False) -> pd.DataFrame:
+    """
+    Fetch OHLCV history. 
+    Defaults to yfinance for bulk scanning (speed).
+    Set use_polygon=True for high-fidelity Deep Dive data.
+    """
+    cache_key = f"{ticker}::{period}::poly_{use_polygon}"
+    
+    if cache_key in LOCAL_CACHE:
+        return LOCAL_CACHE[cache_key]
 
-def fetch_history(ticker: str, period: str = "2y") -> pd.DataFrame:
-    """
-    Fetch OHLCV history via yfinance with an in-process LRU-style cache.
-    """
-    cache_key = f"{ticker}::{period}"
-    if cache_key not in LOCAL_CACHE:
-        time.sleep(1.0)  # polite rate-limit guard
+    df = pd.DataFrame()
+
+    # --- POLYGON EOD FETCH LOGIC ---
+    if use_polygon and polygon_client:
         try:
-            LOCAL_CACHE[cache_key] = yf.Ticker(ticker).history(period=period)
+            end_date = datetime.today()
+            if period == "2y":
+                start_date = end_date - timedelta(days=730)
+            elif period == "1y":
+                start_date = end_date - timedelta(days=365)
+            elif period == "6mo":
+                start_date = end_date - timedelta(days=180)
+            else:
+                start_date = end_date - timedelta(days=30)
+
+            aggs = polygon_client.get_aggs(
+                ticker, 
+                1, 
+                "day", 
+                start_date.strftime('%Y-%m-%d'), 
+                end_date.strftime('%Y-%m-%d')
+            )
+            
+            if aggs:
+                df = pd.DataFrame(aggs)
+                df['Date'] = pd.to_datetime(df['timestamp'], unit='ms')
+                df = df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'})
+                df = df.set_index('Date')
+                df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+                logger.info(f"[{ticker}] Data fetched successfully via Polygon.")
+                
         except Exception as e:
-            logger.warning(f"[{ticker}] fetch_history failed: {e}")
-            LOCAL_CACHE[cache_key] = pd.DataFrame()
-    return LOCAL_CACHE[cache_key]
+            logger.warning(f"[{ticker}] Polygon fetch failed: {e}. Falling back to yfinance.")
+            df = pd.DataFrame()
+
+    # --- YFINANCE FALLBACK (or default for scanners) ---
+    if df.empty:
+        time.sleep(0.5)  # Gentle rate limit for yf
+        try:
+            df = yf.Ticker(ticker, session=safe_session).history(period=period)
+            logger.info(f"[{ticker}] Data fetched via yfinance.")
+        except Exception as e:
+            logger.warning(f"[{ticker}] yfinance fetch failed: {e}")
+            df = pd.DataFrame()
+
+    LOCAL_CACHE[cache_key] = df
+    return df
+
+# ---------------------------------------------------------------------------
+# SPARKLINE HELPERS
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
