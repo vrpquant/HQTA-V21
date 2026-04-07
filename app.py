@@ -769,8 +769,8 @@ if check_login():
 
                     if pd.isna(vrp_edge_val):
                         st.warning(
-                            f"⚠️ OPTIONS API BLOCKED: Live Implied Volatility unavailable for {ticker}. "
-                            f"Falling back to historical VRP proxy."
+                            f"⚠️ NOTICE: Data may be delayed. Live options pricing for {ticker} is currently unavailable. "
+                            f"Calculating VRP using historical proxy."
                         )
                         # Graceful Fallback: Use scanner math instead of crashing
                         vrp_edge_val = QuantLogic.calculate_vrp_edge(ticker, df, mode="scanner")
