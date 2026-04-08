@@ -96,19 +96,13 @@ except Exception:
 # SHARED DATA FETCHER (Hybrid: Polygon + yfinance)
 # ---------------------------------------------------------------------------
 
-LOCAL_CACHE: dict[str, pd.DataFrame] = {}
-
+@st.cache_data(ttl=900, show_spinner=False)
 def fetch_history(ticker: str, period: str = "2y", use_polygon: bool = False) -> pd.DataFrame:
     """
     Fetch OHLCV history. 
     Defaults to yfinance for bulk scanning (speed).
     Set use_polygon=True for high-fidelity Deep Dive data.
     """
-    cache_key = f"{ticker}::{period}::poly_{use_polygon}"
-    
-    if cache_key in LOCAL_CACHE:
-        return LOCAL_CACHE[cache_key]
-
     df = pd.DataFrame()
 
     # --- POLYGON EOD FETCH LOGIC ---
@@ -148,18 +142,14 @@ def fetch_history(ticker: str, period: str = "2y", use_polygon: bool = False) ->
     if df.empty:
         time.sleep(0.5)  # Gentle rate limit for yf
         try:
+            # NOTE: No safe_session here! Let yfinance use its internal scraper.
             df = yf.Ticker(ticker).history(period=period)
             logger.info(f"[{ticker}] Data fetched via yfinance.")
         except Exception as e:
             logger.warning(f"[{ticker}] yfinance fetch failed: {e}")
             df = pd.DataFrame()
 
-    LOCAL_CACHE[cache_key] = df
     return df
-
-# ---------------------------------------------------------------------------
-# SPARKLINE HELPERS
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
