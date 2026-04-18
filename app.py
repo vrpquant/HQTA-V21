@@ -132,7 +132,7 @@ if not st.session_state["authenticated"]:
             else:
                 st.error("Invalid email, password, or inactive subscription.")
     st.markdown("---")
-    st.markdown("### 👑 Founding Member Cohort")
+    st.markdown("### Founding Member Cohort")
     b1, b2 = st.columns(2)
     with b1:
         st.info("**ANALYST TIER**\n* Retail: ~~$299/mo~~\n* Founding: **$149/mo**")
