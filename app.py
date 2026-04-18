@@ -257,7 +257,7 @@ def chart_mc_fan(mc: dict, S: float, K: float) -> None:
     fig.update_layout(**_DK, height=520, title=f"Monte Carlo — {mc['n_paths']:,} Paths")
     st.plotly_chart(fig, use_container_width=True)
 
-    fig2 = go.Figure(go.Histogram(x=mc["S_T"], nbins=100, marker_color="#A78BFA"))
+    fig2 = go.Figure(go.Histogram(x=mc["S_T"], nbinsx=100, marker_color="#A78BFA"))
     fig2.add_vline(x=K, line_dash="dash", line_color="#F87171", annotation_text=f"Strike ${K:.2f}")
     fig2.add_vline(x=S, line_dash="dot", line_color="#4ADE80", annotation_text=f"Spot ${S:.2f}")
     fig2.update_layout(**_DK, height=380, title="Terminal Price Distribution at Expiry")
