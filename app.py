@@ -296,27 +296,7 @@ with st.sidebar:
     else:
         st.warning("🔒 ANALYST TIER")
 
-    # 5-source data layer status
-    ds = data_layer_status()
-    st.markdown("#### 📡 Data Waterfall (5 Sources)")
-
-    sources = [
-        ("polygon_active",     "Polygon.io",       "15-min delayed"),
-        ("alphavantage_active", "Alpha Vantage",    "Real-time"),
-        ("google_finance",     "Google Finance",    "Scrape (no key)"),
-        ("grok_active",          "Grok (xAI)",        "Free $175/mo"),
-        ("yfinance",           "yfinance",          "EOD fallback"),
-    ]
-    for key, name, note in sources:
-        active = ds.get(key, False)
-        icon = "🟢" if active else "🔴"
-        label = f"ACTIVE ({note})" if active else "KEY MISSING"
-        st.markdown(f"{icon} **{name}** — {label}")
-
-    cache = ds["cache_stats"]
-    st.caption(f"Cache: {cache['live_entries']} live, {cache['stale_entries']} stale")
-
-    st.markdown("---")
+        st.markdown("---")
     mode = st.radio("Module", [" Market Scanner", "🔬 Deep Dive Analysis"])
     st.markdown("---")
     if st.button("🔄 Clear Cache"):
