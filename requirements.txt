@@ -1,8 +1,49 @@
-streamlit
-pandas
-numpy
-yfinance
-plotly
-arch   # optional – GARCH(1,1); falls back to EWMA if missing
-supabase
-polygon-api-client
+=============================================================================
+
+VRP QUANT v30.5.0-A+ — Production Requirements
+
+Streamlit Cloud | Python 3.11 / 3.12
+
+=============================================================================
+
+── Core Streamlit ──
+
+streamlit>=1.35.0
+
+── Auth ──
+
+supabase>=2.4.0
+gotrue>=2.4.0
+bcrypt>=4.1.0
+
+── Data & Math ──
+
+numpy>=1.26.0,<2.1.0
+pandas>=2.1.0
+scipy>=1.12.0
+yfinance>=0.2.38
+requests>=2.31.0
+websockets>=12.0
+
+── GARCH Volatility ──
+
+arch>=6.3.0
+
+── Charts ──
+
+plotly>=5.20.0
+
+── Real-time / AI APIs (optional — graceful degradation) ──
+
+openai>=1.30.0
+python-dotenv>=1.0.0
+
+── Notes ──
+
+Polygon.io:      pure REST via requests (no pip package needed)
+
+Alpha Vantage:   pure REST via requests (no pip package needed, free key at alphavantage.co)
+
+Google Finance:  pure HTTP scrape (no pip package needed, no key needed)
+
+Perplexity:      uses openai package (same API format, key optional)
