@@ -533,7 +533,7 @@ elif mode == "🔬 Deep Dive Analysis":
 
         except Exception as e:
             st.error(f"Deep Dive Error: {e}")
-                st.exception(e)
+            st.exception(e)
 
 
 # =============================================================================
