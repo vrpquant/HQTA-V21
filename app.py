@@ -503,15 +503,20 @@ elif mode == "🔬 Deep Dive Analysis":
                 chart_kalman_garch(bt_df)
 
                 # Monte Carlo — [APP-02] configurable path count
-                st.markdown("### 🎲 Monte Carlo + Jump-Diffusion")
-                mc_paths = 50_000
-                if tier == "GOD_MODE":
-                    mc_paths = st.slider("MC Paths", 10_000, 100_000, 50_000, 10_000,
-                                         help="More paths = higher accuracy, slower compute")
-                mc = QuantMath.monte_carlo_paths(
-                    curr, T30, rfr, sigma, n_paths=mc_paths,
-                    option_type="put", strike=sup, jump_diffusion=True, seed=42)
-                chart_mc_fan(mc, curr, sup)
+        st.markdown("### 🎲 Monte Carlo + Jump-Diffusion")
+        
+        # Change default to 100k to match the VRP Engine Infographic
+        mc_paths = 100_000 
+        
+        if tier == "GOD_MODE":
+            # Slider defaults to 100k now
+            mc_paths = st.slider("MC Paths", 10_000, 100_000, 100_000, 10_000,
+                                 help="More paths = higher accuracy, slower compute")
+                                 
+        mc = QuantMath.monte_carlo_paths(
+            curr, T30, rfr, sigma, n_paths=mc_paths,
+            option_type="put", strike=sup, jump_diffusion=True, seed=42)
+        chart_mc_fan(mc, curr, sup)
 
                 # MC POP + P&L
                 st.markdown("### 🎯 Monte Carlo Analytics")
