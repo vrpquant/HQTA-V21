@@ -532,6 +532,7 @@ elif mode == "🔬 Deep Dive Analysis":
 
         except Exception as e:
             st.error(f"Deep Dive Error: {e}")
+        
         st.markdown("<br><br>", unsafe_allow_html=True)
 
 
