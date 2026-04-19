@@ -530,6 +530,12 @@ elif mode == "🔬 Deep Dive Analysis":
                 p3.metric("Expected P&L", f"${pnl['expected_pnl']:.2f}")
                 p4.metric("Profit Prob", f"{pnl['profit_prob']*100:.1f}%")
 
+                
+               except Exception as e:
+                   st.error(f"Deep Dive Error: {e}")
+
+               st.markdown("<br><br>", unsafe_allow_html=True)
+
 
 # =============================================================================
 # COMPLIANCE FOOTER
