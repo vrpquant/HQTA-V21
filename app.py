@@ -524,7 +524,7 @@ elif mode == "🔬 Deep Dive Analysis":
                 pnl = QuantMath.option_pnl(mc["S_T"], sup, bs["price"], "put")
                 true_pop = QuantMath.true_pop_with_premium(mc["S_T"], sup, bs["price"], "put")
                 
-                                                p1, p2, p3, p4 = st.columns(4)
+                p1, p2, p3, p4 = st.columns(4)
                 p1.metric("MC POP (with premium)", f"{true_pop*100:.1f}%")
                 p2.metric("Breakeven", f"${pnl['breakeven']:.2f}")
                 p3.metric("Expected P&L", f"${pnl['expected_pnl']:.2f}")
@@ -532,6 +532,24 @@ elif mode == "🔬 Deep Dive Analysis":
 
         except Exception as e:
             st.error(f"Deep Dive Error: {e}")
-            
+        
         st.markdown("<br><br>", unsafe_allow_html=True)
+
+
+# =============================================================================
+# COMPLIANCE FOOTER
+# =============================================================================
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("""
+<div style="font-size:0.82em;color:#94A3B8;line-height:1.7;text-align:justify;
+            padding:15px;border-left:4px solid #F59E0B;background:#1E293B;border-radius:4px;">
+    <b style="color:#F8FAFC;">RISK DISCLOSURE</b><br>
+    VRP Quant is a quantitative research tool. It is not a registered investment advisor,
+    broker-dealer, or financial planner. All outputs are for <strong>informational and educational
+    purposes only</strong>. Options trading carries substantial risk. Verify all data independently.<br>
+    <div style="text-align:center;font-size:0.85em;color:#64748B;margin-top:8px;">
+        © 2026 vrpquant.com. All Rights Reserved.
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
