@@ -412,7 +412,7 @@ elif mode == "🔬 Deep Dive Analysis":
     ticker = st.text_input("Asset Ticker", "TSLA").upper().strip()
 
     if st.button("▶ Run Deep Dive", use_container_width=True):
-        with st.spinner("Running GARCH + 200-step CRR + 50k MC + Jump-Diffusion..."):
+        with st.spinner("Running GARCH + 200-step CRR + 100k MC + Jump-Diffusion..."):
             try:
                 df = fetch_history(ticker, "2y")
                 if df.empty:
@@ -530,9 +530,9 @@ elif mode == "🔬 Deep Dive Analysis":
 
                 # Monte Carlo — configurable path count for GOD_MODE
                 st.markdown("### 🎲 Monte Carlo + Jump-Diffusion")
-                mc_paths = 50_000
+                mc_paths = 100_000
                 if tier == "GOD_MODE":
-                    mc_paths = st.slider("MC Paths", 10_000, 100_000, 50_000, 10_000,
+                    mc_paths = st.slider("MC Paths", 10_000, 100_000, 100_000, 10_000,
                                          help="More paths = higher accuracy, slower compute")
                 mc = QuantMath.monte_carlo_paths(
                     curr, T30, rfr, sigma, n_paths=mc_paths,
