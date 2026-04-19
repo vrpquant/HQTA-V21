@@ -502,38 +502,33 @@ elif mode == "🔬 Deep Dive Analysis":
                 chart_greeks_bar(bs)
                 chart_kalman_garch(bt_df)
 
-                try:
-            # Monte Carlo — [APP-02] configurable path count
-            st.markdown("### 🎲 Monte Carlo + Jump-Diffusion")
-            
-            # Change default to 100k to match the VRP Engine Infographic
-            mc_paths = 100_000 
-            
-            if tier == "GOD_MODE":
-                # Slider defaults to 100k now
-                mc_paths = st.slider("MC Paths", 10_000, 100_000, 100_000, 10_000,
-                                     help="More paths = higher accuracy, slower compute")
-                                     
-            mc = QuantMath.monte_carlo_paths(
-                curr, T30, rfr, sigma, n_paths=mc_paths,
-                option_type="put", strike=sup, jump_diffusion=True, seed=42)
-            
-            chart_mc_fan(mc, curr, sup)
+                # Monte Carlo — [APP-02] configurable path count
+                st.markdown("### 🎲 Monte Carlo + Jump-Diffusion")
+                
+                # Change default to 100k to match the VRP Engine Infographic
+                mc_paths = 100_000 
+                
+                if tier == "GOD_MODE":
+                    # Slider defaults to 100k now
+                    mc_paths = st.slider("MC Paths", 10_000, 100_000, 100_000, 10_000,
+                                         help="More paths = higher accuracy, slower compute")
+                                         
+                mc = QuantMath.monte_carlo_paths(
+                    curr, T30, rfr, sigma, n_paths=mc_paths,
+                    option_type="put", strike=sup, jump_diffusion=True, seed=42)
+                
+                chart_mc_fan(mc, curr, sup)
 
-            # MC POP + P&L
-            st.markdown("### 🎯 Monte Carlo Analytics")
-            pnl = QuantMath.option_pnl(mc["S_T"], sup, bs["price"], "put")
-            true_pop = QuantMath.true_pop_with_premium(mc["S_T"], sup, bs["price"], "put")
-            
-            p1, p2, p3, p4 = st.columns(4)
-            p1.metric("MC POP (with premium)", f"{true_pop*100:.1f}%")
-            p2.metric("Breakeven", f"${pnl['breakeven']:.2f}")
-            p3.metric("Expected P&L", f"${pnl['expected_pnl']:.2f}")
-            p4.metric("Profit Prob", f"{pnl['profit_prob']*100:.1f}%")
-
-        except Exception as e:
-            st.error(f"Deep Dive Error: {e}")
-            st.exception(e)
+                # MC POP + P&L
+                st.markdown("### 🎯 Monte Carlo Analytics")
+                pnl = QuantMath.option_pnl(mc["S_T"], sup, bs["price"], "put")
+                true_pop = QuantMath.true_pop_with_premium(mc["S_T"], sup, bs["price"], "put")
+                
+                p1, p2, p3, p4 = st.columns(4)
+                p1.metric("MC POP (with premium)", f"{true_pop*100:.1f}%")
+                p2.metric("Breakeven", f"${pnl['breakeven']:.2f}")
+                p3.metric("Expected P&L", f"${pnl['expected_pnl']:.2f}")
+                p4.metric("Profit Prob", f"{pnl['profit_prob']*100:.1f}%")
 
 
 # =============================================================================
