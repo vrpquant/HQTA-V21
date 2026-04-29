@@ -472,6 +472,15 @@ elif mode == "🔬 Deep Dive Analysis":
                 m9.metric("Resistance", f"${res:.2f}")
                 m10.metric("95% VaR", f"${QuantLogic.calculate_var(df):.2f}")
 
+                # [RESTORED] Expected Move Metrics
+                st.markdown("### 🎯 30-DTE Expected Move")
+                em = OptionsExpectedMove.from_iv(curr, T30, sigma)
+                em1, em2, em3, em4 = st.columns(4)
+                em1.metric("+1σ (68%)", f"${em['upper_1s']:.2f}")
+                em2.metric("-1σ (68%)", f"${em['lower_1s']:.2f}")
+                em3.metric("+2σ (95%)", f"${em['upper_2s']:.2f}")
+                em4.metric("-2σ (95%)", f"${em['lower_2s']:.2f}")
+
                 # Full Greeks
                 st.markdown("### 📐 Black-Scholes Full Greeks")
                 bs = QuantMath.black_scholes(curr, sup, T30, rfr, sigma, "put")
