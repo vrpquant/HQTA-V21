@@ -1682,11 +1682,19 @@ class MarketScanner:
             mvo = mvo_weights.get(t, 0)
             kelly_p = PortfolioEngine.kelly_weight(df)
             ult = score * 0.35 + cs_r * 100 * 0.20 + kelly_p * 50 * 0.15 + vol_tgt * 50 * 0.15 + mvo * 50 * 0.15
-            signal = (
-                "🎯 ULTIMATE LONG" if (regime != "Risk-Off" and ult > 65 and vrp < 0 and wr > 10 and sr > 50)
-                else "🩸 ULTIMATE SHORT" if (ult < 35 and vrp > 0 and wr > 10 and sr > 50)
-                else "Standard"
-            )
+            
+            # Restored ULTRA LONG / SHORT Logic
+            if regime != "Risk-Off" and score >= 80 and vrp < -5.0:
+                signal = "🚀 ULTRA LONG"
+            elif score <= 20 and vrp > 5.0:
+                signal = "🩸 ULTRA SHORT"
+            elif regime != "Risk-Off" and ult > 65 and vrp < 0 and wr > 10 and sr > 50:
+                signal = "🎯 ULTIMATE LONG"
+            elif ult < 35 and vrp > 0 and wr > 10 and sr > 50:
+                signal = "🩸 ULTIMATE SHORT"
+            else:
+                signal = "Standard"
+
             return {
                 "Ticker": t, "Price": round(price, 2), "Ultimate Signal": signal,
                 "Alpha Score": score, "Trend": plan["bias"], "VRP Edge": f"{vrp:+.1f}%",
