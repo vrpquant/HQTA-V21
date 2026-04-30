@@ -1684,7 +1684,7 @@ class MarketScanner:
             ult = score * 0.35 + cs_r * 100 * 0.20 + kelly_p * 50 * 0.15 + vol_tgt * 50 * 0.15 + mvo * 50 * 0.15
             
             # Restored ULTRA LONG / SHORT Logic
-            if regime != "Risk-Off" and score >= 80 and vrp < -5.0:
+            if regime != "Risk-Off" and score >= 40 and vrp < -5.0:
                 signal = "🚀 ULTRA LONG"
             elif score <= 20 and vrp > 5.0:
                 signal = "🩸 ULTRA SHORT"
