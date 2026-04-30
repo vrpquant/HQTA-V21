@@ -1684,21 +1684,33 @@ class MarketScanner:
             ult = score * 0.35 + cs_r * 100 * 0.20 + kelly_p * 50 * 0.15 + vol_tgt * 50 * 0.15 + mvo * 50 * 0.15
             
             # Restored ULTRA LONG / SHORT Logic
-            if regime != "Risk-Off" and score >= 40 and vrp < -5.0:
-                signal = "🚀 ULTRA LONG"
+            mvo = mvo_weights.get(t, 0)
+            kelly_p = PortfolioEngine.kelly_weight(df)
+            ult = score * 0.35 + cs_r * 100 * 0.20 + kelly_p * 50 * 0.15 + vol_tgt * 50 * 0.15 + mvo * 50 * 0.15
+            
+            # 1. Removed Emojis to fix UI wrapping (and restored strict 80/20 thresholds)
+            if regime != "Risk-Off" and score >= 80 and vrp < -5.0:
+                signal = "ULTRA LONG"
             elif score <= 20 and vrp > 5.0:
-                signal = "🩸 ULTRA SHORT"
+                signal = "ULTRA SHORT"
             elif regime != "Risk-Off" and ult > 65 and vrp < 0 and wr > 10 and sr > 50:
-                signal = "🎯 ULTIMATE LONG"
+                signal = "ULTIMATE LONG"
             elif ult < 35 and vrp > 0 and wr > 10 and sr > 50:
-                signal = "🩸 ULTIMATE SHORT"
+                signal = "ULTIMATE SHORT"
             else:
                 signal = "Standard"
+
+            # 2. Calculate 30-DTE Expected Move for the Scanner Table
+            T30 = 30 / 365
+            sigma = max(0.01, vol / 100.0)
+            em = OptionsExpectedMove.from_iv(price, T30, sigma)
+            exp_move_str = f"±${em['em_1sigma']:.2f}"
 
             return {
                 "Ticker": t, "Price": round(price, 2), "Ultimate Signal": signal,
                 "Alpha Score": score, "Trend": plan["bias"], "VRP Edge": f"{vrp:+.1f}%",
-                "Vol": f"{vol:.1f}%", "Vol-Target %": f"{round(vol_tgt * 100, 1)}%",
+                "Vol": f"{vol:.1f}%", "Exp. Move": exp_move_str, 
+                "Vol-Target %": f"{round(vol_tgt * 100, 1)}%",
                 "Support": round(sup, 2), "Resistance": round(res, 2),
                 "HQTA Apex Action": hybrid["action"], "Strategy": plan["name"],
                 "Kelly": kelly,
